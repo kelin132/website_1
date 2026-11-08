@@ -116,6 +116,10 @@ export type LeaderboardRow = {
   trainerXp: number;
   trainerLevel: number;
   coins: number;
+  wallet: number;
+  bank: number;
+  badges: string[];
+  inventoryItems: string[];
   avatarUrl: string | null;
   avatarVideoUrl: string | null;
   profileBackground: string | null;

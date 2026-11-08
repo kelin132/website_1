@@ -450,6 +450,8 @@ const LEADERBOARD_USER_PROJECTION = {
   xp: 1,
   money: 1,
   bank: 1,
+  badges: 1,
+  inventory: 1,
   profilePictureUrl: 1,
   profileImage: 1,
   avatarUrl: 1,
@@ -798,6 +800,15 @@ function rowFromUser(
   ].find((key) => typeof doc[key] === "string" && String(doc[key]).trim());
   const name = displayNameFromRecord(doc);
   const profileVideo = recordString(doc, ["avatarVideo", "avatarVideoUrl", "profileVideoUrl", "videoUrl", "profileVideo"]);
+  const rawInventory = doc["inventory"];
+  const inventoryItems = Array.isArray(rawInventory)
+    ? rawInventory.map((item) => String(item)).filter(Boolean).slice(0, 24)
+    : rawInventory && typeof rawInventory === "object"
+      ? Object.entries(rawInventory as Record<string, unknown>)
+          .filter(([, quantity]) => Number(quantity) > 0)
+          .slice(0, 24)
+          .map(([item, quantity]) => `${item} ×${Number(quantity)}`)
+      : [];
   return {
     id: String(doc["_id"] ?? doc["jid"] ?? doc["userId"] ?? ""),
     name,
@@ -818,6 +829,10 @@ function rowFromUser(
     trainerXp: Number(doc["trainerXp"] ?? doc["xp"]) || 0,
     trainerLevel: Number(doc["trainerLevel"] ?? 1) || 1,
     coins: Number(doc["leaderboardCoins"] ?? (Number(doc["money"]) || 0) + (Number(doc["bank"]) || 0)),
+    wallet: Math.max(0, Number(doc["money"]) || 0),
+    bank: Math.max(0, Number(doc["bank"]) || 0),
+    badges: Array.isArray(doc["badges"]) ? doc["badges"].map(String).filter(Boolean).slice(0, 24) : [],
+    inventoryItems,
     avatarUrl: avatar ? String(doc[avatar]) : null,
     avatarVideoUrl: profileVideo && /^https?:\/\//i.test(profileVideo) ? profileVideo : null,
     profileBackground: recordString(doc, ["profileBackground", "background"]) || null,

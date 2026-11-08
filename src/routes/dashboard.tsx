@@ -195,7 +195,35 @@ function LeaderboardBody() {
                   <ProfileStat label={selectedPlayer.scoreLabel} value={scoreText(selectedPlayer)} />
                   <ProfileStat label="Pokémon" value={String(selectedPlayer.pokemonCount)} />
                   <ProfileStat label="Cards" value={String(selectedPlayer.cardCount)} />
+                  <ProfileStat label="Wallet" value={`$${selectedPlayer.wallet.toLocaleString()}`} />
+                  <ProfileStat label="Bank" value={`$${selectedPlayer.bank.toLocaleString()}`} />
+                  <ProfileStat label="Achievements" value={String(selectedPlayer.badges.length)} />
+                  <ProfileStat label="Inventory" value={String(selectedPlayer.inventoryItems.length)} />
                 </div>
+                {selectedPlayer.badges.length > 0 && (
+                  <div>
+                    <p className="mb-2 text-xs font-bold uppercase tracking-[0.16em] text-muted-foreground">Achievements</p>
+                    <div className="flex flex-wrap gap-2">
+                      {selectedPlayer.badges.map((badge) => (
+                        <span key={badge} className="rounded-full border border-border bg-background/70 px-3 py-1 text-xs font-semibold">
+                          {badge.replace(/[-_]/g, " ")}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                {selectedPlayer.inventoryItems.length > 0 && (
+                  <div>
+                    <p className="mb-2 text-xs font-bold uppercase tracking-[0.16em] text-muted-foreground">Inventory</p>
+                    <div className="flex flex-wrap gap-2">
+                      {selectedPlayer.inventoryItems.map((item, index) => (
+                        <span key={`${item}-${index}`} className="rounded-full border border-border bg-background/70 px-3 py-1 text-xs font-semibold">
+                          {item.replace(/[_-]/g, " ")}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
             )}
           </DialogContent>
