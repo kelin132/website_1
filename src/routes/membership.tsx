@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { BadgeCheck, Crown, Sparkles } from "lucide-react";
+import { Crown, ShieldCheck, Sparkles } from "@/lib/lucide-icons";
 import { AppShell } from "@/components/aidoru/AppShell";
 
 export const Route = createFileRoute("/membership")({
@@ -16,7 +16,7 @@ const plans = [
   {
     name: "Basic",
     price: "$1.99",
-    icon: BadgeCheck,
+    icon: ShieldCheck,
     color: "#62e5d7",
     features: [
       "5% win-rate boost",

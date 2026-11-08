@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { createServerFn, useServerFn } from "@tanstack/react-start";
 import { useQuery } from "@tanstack/react-query";
-import { LoaderCircle, Ticket } from "lucide-react";
+import { LoaderCircle, WalletCards } from "@/lib/lucide-icons";
 import { AppShell } from "@/components/aidoru/AppShell";
 import { requireUser } from "@/lib/auth.server";
 import { getDb } from "@/lib/db.server";
@@ -67,7 +67,7 @@ function LotteryPage() {
           <>
             <section className="hof-panel overflow-hidden p-6 sm:p-8">
               <div className="flex items-center gap-3">
-                <Ticket className="size-7 text-cyan-200" />
+                <WalletCards className="size-7 text-cyan-200" />
                 <div>
                   <p className="hof-kicker">Current draw</p>
                   <h1 className="hof-heading text-3xl">Lottery tracker</h1>
