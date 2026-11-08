@@ -55,7 +55,10 @@ function BattleRoomBody({ roomId }: { roomId: string }) {
   const query = useQuery({
     queryKey: ["aidoru", "battle-room", roomId],
     queryFn: () => loadRoom({ data: { roomId } }),
-    refetchInterval: 1400,
+    refetchInterval: (current) => {
+      const status = current.state.data?.status;
+      return status === "active" ? 900 : status === "waiting" ? 2500 : false;
+    },
     retry: false,
   });
   const mutation = useMutation({
@@ -351,7 +354,7 @@ function BattleSoundscape({
   status: BattleRoom["status"];
   pokemon: BattleRoom["challenger"]["party"];
 }) {
-  const [enabled, setEnabled] = useState(false);
+  const [enabled, setEnabled] = useState(true);
   const audioRef = useRef<AudioContext | null>(null);
   const cryAudioRef = useRef<HTMLAudioElement | null>(null);
   const previousLength = useRef(combatLog.length);
@@ -387,35 +390,56 @@ function BattleSoundscape({
   };
 
   useEffect(() => {
+    const unlock = () => {
+      const AudioContextCtor =
+        window.AudioContext ||
+        (window as typeof window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+      if (!AudioContextCtor) return;
+      audioRef.current ??= new AudioContextCtor();
+      void audioRef.current.resume().catch(() => undefined);
+    };
+    window.addEventListener("pointerdown", unlock, { once: true });
+    window.addEventListener("keydown", unlock, { once: true });
+    return () => {
+      window.removeEventListener("pointerdown", unlock);
+      window.removeEventListener("keydown", unlock);
+    };
+  }, []);
+
+  useEffect(() => {
     if (!enabled) {
       previousLength.current = combatLog.length;
       return;
     }
-    const latest = combatLog[combatLog.length - 1] ?? "";
-    if (combatLog.length > previousLength.current) {
-      const lowerLog = latest.toLowerCase();
-      const cryingPokemon = pokemon.find((entry) => {
-        const names = [entry.displayName, entry.name].filter(Boolean).map((name) => name.toLowerCase());
-        return names.some((name) => name.length > 1 && lowerLog.includes(name));
-      });
-      if (cryingPokemon && Number(cryingPokemon.pokedexId) > 0 && /used|fainted|counterattacked|stunned/i.test(latest)) {
-        const cry = cryAudioRef.current ?? new Audio();
-        cryAudioRef.current = cry;
-        cry.src = `https://raw.githubusercontent.com/PokeAPI/cries/main/cries/pokemon/latest/${cryingPokemon.pokedexId}.ogg`;
-        cry.volume = 0.32;
-        cry.currentTime = 0;
-        void cry.play().catch(() => undefined);
-      }
-      if (/fainted/i.test(latest)) {
-        tone(180, 0.24, "sawtooth", 0.06);
-        window.setTimeout(() => tone(110, 0.35, "triangle", 0.045), 100);
-      } else if (/wins|victory|complete/i.test(latest) || status === "finished") {
-        tone(523, 0.18, "triangle");
-        window.setTimeout(() => tone(659, 0.24, "triangle"), 130);
-      } else if (/hit|damage|used|attacked|sent out/i.test(latest)) {
-        tone(260, 0.08, "square", 0.025);
-      }
-      previousLength.current = combatLog.length;
+    const newEntries = combatLog.slice(previousLength.current);
+    if (newEntries.length === 0) return;
+    previousLength.current = combatLog.length;
+    const faintEntry = newEntries.find((entry) => /fainted/i.test(entry));
+    const latest = faintEntry ?? [...newEntries].reverse().find((entry) => /used|counterattacked|sent out/i.test(entry)) ?? "";
+    const lowerLog = faintEntry?.toLowerCase() ?? "";
+    const cryingPokemon = pokemon.find((entry) => {
+      const names = [entry.displayName, entry.name].filter(Boolean).map((name) => name.toLowerCase());
+      return names.some((name) => name.length > 1 && lowerLog.includes(name));
+    });
+    if (cryingPokemon && Number(cryingPokemon.pokedexId) > 0 && faintEntry) {
+      const cry = cryAudioRef.current ?? new Audio();
+      cryAudioRef.current = cry;
+      cry.src = `https://raw.githubusercontent.com/PokeAPI/cries/main/cries/pokemon/latest/${cryingPokemon.pokedexId}.ogg`;
+      cry.volume = 0.38;
+      cry.currentTime = 0;
+      void cry.play().catch(() => undefined);
+    }
+    if (faintEntry) {
+      const faintSound = new Audio("/battle-music/se_faint.mp3");
+      faintSound.volume = 0.52;
+      void faintSound.play().catch(() => undefined);
+      tone(180, 0.24, "sawtooth", 0.06);
+      window.setTimeout(() => tone(110, 0.35, "triangle", 0.045), 100);
+    } else if (/wins|victory|complete/i.test(latest) || status === "finished") {
+      tone(523, 0.18, "triangle");
+      window.setTimeout(() => tone(659, 0.24, "triangle"), 130);
+    } else if (/hit|damage|used|attacked|sent out/i.test(latest)) {
+      tone(260, 0.08, "square", 0.025);
     }
   }, [combatLog, enabled, pokemon, status]);
 
@@ -500,20 +524,22 @@ function BattleMusic({ status }: { status: BattleRoom["status"] }) {
   const [track] = useState(
     () => battleMusicTracks[Math.floor(Math.random() * battleMusicTracks.length)],
   );
-  const [enabled, setEnabled] = useState(true);
+  const [enabled, setEnabled] = useState(false);
   useEffect(() => {
     const audio = audioRef.current;
     if (!audio) return;
     const active = enabled && status !== "finished";
     audio.volume = 0.22;
     audio.loop = true;
-    audio.preload = "auto";
+    audio.preload = "none";
+    if (!active) {
+      audio.pause();
+      return;
+    }
     const resume = () => {
-      if (active && audio.paused) void audio.play().catch(() => undefined);
+      if (audio.paused) void audio.play().catch(() => undefined);
     };
-    const watchdog = window.setInterval(resume, 1500);
-    if (active) resume();
-    else audio.pause();
+    resume();
     window.addEventListener("pointerdown", resume);
     window.addEventListener("touchstart", resume, { passive: true });
     window.addEventListener("keydown", resume);
@@ -523,7 +549,6 @@ function BattleMusic({ status }: { status: BattleRoom["status"] }) {
     audio.addEventListener("pause", resume);
     audio.addEventListener("canplay", resume);
     return () => {
-      window.clearInterval(watchdog);
       window.removeEventListener("pointerdown", resume);
       window.removeEventListener("touchstart", resume);
       window.removeEventListener("keydown", resume);
@@ -537,7 +562,7 @@ function BattleMusic({ status }: { status: BattleRoom["status"] }) {
   }, [enabled, status]);
   return (
     <div className="battle-music-control">
-      <audio ref={audioRef} src={`/battle-music/${track}.mp3`} loop autoPlay preload="auto" />
+      <audio ref={audioRef} src={`/battle-music/${track}.mp3`} loop preload="none" />
       <button
         type="button"
         className="hof-button-secondary inline-flex items-center gap-2 px-3 py-2 text-xs"
@@ -608,10 +633,28 @@ function BattleArena({
   const [damageSide, setDamageSide] = useState<"me" | "foe" | null>(null);
   const [damageAmount, setDamageAmount] = useState<number | null>(null);
   const [damageId, setDamageId] = useState(0);
-  const previousHp = useRef({ me: activeMe?.hp ?? null, foe: activeFoe?.hp ?? null });
+  const [faintSide, setFaintSide] = useState<"me" | "foe" | null>(null);
+  const [faintId, setFaintId] = useState(0);
+  const previousHp = useRef({
+    meId: activeMe?.id ?? null,
+    foeId: activeFoe?.id ?? null,
+    me: activeMe?.hp ?? null,
+    foe: activeFoe?.hp ?? null,
+  });
   const previousActiveIds = useRef({ me: activeMe?.id ?? null, foe: activeFoe?.id ?? null });
   useEffect(() => {
-    const next = { me: activeMe?.hp ?? null, foe: activeFoe?.hp ?? null };
+    const next = {
+      meId: activeMe?.id ?? null,
+      foeId: activeFoe?.id ?? null,
+      me: activeMe?.hp ?? null,
+      foe: activeFoe?.hp ?? null,
+    };
+    const activeChanged =
+      previousHp.current.meId !== next.meId || previousHp.current.foeId !== next.foeId;
+    if (activeChanged) {
+      previousHp.current = next;
+      return;
+    }
     const faintedSide =
       previousHp.current.me !== null &&
       previousHp.current.me > 0 &&
@@ -633,10 +676,13 @@ function BattleArena({
     previousHp.current = next;
     if (hitSide) {
       const pkmn = hitSide === "me" ? activeMe : activeFoe;
-      const cryUrl = pkmn ? `https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/cries/${pkmn.pokedexId}.ogg` : null;
-      const sound = new Audio(faintedSide ? "/battle-music/se_faint.mp3" : (cryUrl || "/battle-music/se_ball_throw.mp3"));
-      sound.volume = faintedSide ? 0.5 : 0.28;
-      void sound.play().catch(() => undefined);
+      if (pkmn && !faintedSide) {
+        const sound = new Audio(
+          `https://raw.githubusercontent.com/PokeAPI/cries/main/cries/pokemon/latest/${pkmn.pokedexId}.ogg`,
+        );
+        sound.volume = 0.38;
+        void sound.play().catch(() => undefined);
+      }
     }
     if (!faintedSide) return;
     setRecallSide(faintedSide);
@@ -669,16 +715,21 @@ function BattleArena({
   const previousLogLength = useRef(room.combatLog.length);
   useEffect(() => {
     if (room.combatLog.length <= previousLogLength.current) return;
-    setTransitionId((value) => value + 1);
-    const latest = room.combatLog[room.combatLog.length - 1] ?? "";
+    const newEntries = room.combatLog.slice(previousLogLength.current);
     previousLogLength.current = room.combatLog.length;
-    const damagedSide =
-      activeMe && latest.includes(`${activeMe.displayName} used`)
-        ? "foe"
-        : activeFoe && latest.includes(`${activeFoe.displayName} used`)
-          ? "me"
-          : null;
-    const damageMatch = latest.match(/(\d+) damage/i);
+    const attackEntry = [...newEntries].reverse().find((entry) => / used |counterattacked/i.test(entry));
+    const faintEntry = newEntries.find((entry) => /fainted/i.test(entry));
+    if (attackEntry) setTransitionId((value) => value + 1);
+    const lowerAttack = attackEntry?.toLowerCase() ?? "";
+    const meAttacked = me?.party.some((pokemon) =>
+      lowerAttack.includes(`${pokemon.displayName.toLowerCase()} used`),
+    );
+    const foeAttacked = foe?.party.some((pokemon) => {
+      const name = pokemon.displayName.toLowerCase();
+      return lowerAttack.includes(`${name} used`) || lowerAttack.includes(`${name} counterattacked`);
+    });
+    const damagedSide = meAttacked ? "foe" : foeAttacked ? "me" : null;
+    const damageMatch = attackEntry?.match(/(\d+) damage/i) ?? null;
     if (damagedSide && damageMatch) {
       setDamageSide(damagedSide);
       setDamageAmount(Number(damageMatch[1]));
@@ -688,12 +739,27 @@ function BattleArena({
         setDamageAmount((amount) => (amount === Number(damageMatch[1]) ? null : amount));
       }, 950);
     }
-    if (!/super effective!/i.test(latest)) return;
-    setSuperEffectiveId((value) => value + 1);
-    setSuperEffectiveActive(true);
-    const timer = window.setTimeout(() => setSuperEffectiveActive(false), 900);
-    return () => window.clearTimeout(timer);
-  }, [room.combatLog.length, room.combatLog]);
+    if (faintEntry) {
+      const line = faintEntry.toLowerCase();
+      const faintedByMe = me?.party.some((pokemon) =>
+        line.includes(`${pokemon.displayName.toLowerCase()} fainted`),
+      );
+      const faintedByFoe = foe?.party.some((pokemon) =>
+        line.includes(`${pokemon.displayName.toLowerCase()} fainted`),
+      );
+      if (faintedByMe || faintedByFoe) {
+        const side = faintedByMe ? "me" : "foe";
+        setFaintSide(side);
+        setFaintId((value) => value + 1);
+        window.setTimeout(() => setFaintSide((current) => (current === side ? null : current)), 1450);
+      }
+    }
+    if (attackEntry && /super effective!/i.test(attackEntry)) {
+      setSuperEffectiveId((value) => value + 1);
+      setSuperEffectiveActive(true);
+      window.setTimeout(() => setSuperEffectiveActive(false), 900);
+    }
+  }, [activeFoe?.displayName, activeMe?.displayName, foe, me, room.combatLog, room.combatLog.length]);
   const winnerName =
     room.winnerId === room.challenger.id
       ? room.challenger.name
@@ -752,12 +818,18 @@ function BattleArena({
         {room.combatLog[room.combatLog.length - 1] ?? "The Pokémon match is ready."}
       </div>
       <div
-        className={`battle-field ${room.gym ? `battle-gym-field battle-gym-field-${room.gym.theme}` : `battle-field-map-${room.arenaId ?? "meadow"}`} ${transitionId > 0 ? "battle-field-pulse" : ""} ${superEffectiveActive ? "battle-field-super-effective" : ""} ${myTurn ? "battle-field-my-turn" : ""} ${room.status === "finished" ? "battle-field-finished" : ""}`}
+        className={`battle-field ${room.gym ? `battle-gym-field battle-gym-field-${room.gym.theme}` : `battle-field-map-${room.arenaId ?? "meadow"}`} ${room.weather ? `battle-field-weather-${room.weather.id}` : ""} ${transitionId > 0 ? "battle-field-pulse" : ""} ${superEffectiveActive ? "battle-field-super-effective" : ""} ${myTurn ? "battle-field-my-turn" : ""} ${room.status === "finished" ? "battle-field-finished" : ""}`}
         style={room.gym ? ({
           "--gym-accent": room.gym.accent,
           "--gym-bg": `url("${room.gym.background}")`,
         } as CSSProperties) : undefined}
       >
+        {room.weather && (
+          <div
+            className={`battle-weather-layer battle-weather-layer-${room.weather.id}`}
+            aria-hidden="true"
+          />
+        )}
         <div className="battle-field-caption" aria-hidden="true">
           <span>{room.gym ? `${room.gym.name} · ${room.gym.type} arena` : "AIDORU battle field"}</span>
           <span>{room.status === "active" ? `ROUND ${room.round}` : room.status === "finished" ? "RESULT" : "ARENA READY"}</span>
@@ -806,6 +878,16 @@ function BattleArena({
         <div className="battle-platform platform-foe" />
         <div className="battle-platform platform-me" />
         {damageSide && <BattleDamageBurst key={damageId} side={damageSide} amount={damageAmount} />}
+        {faintSide && (
+          <div
+            key={faintId}
+            className={`battle-faint-stamp battle-faint-stamp-${faintSide}`}
+            role="status"
+            aria-live="polite"
+          >
+            <span>FAINTED</span>
+          </div>
+        )}
         {sendOutSide && (
           <div
             className={`battle-pokeball-sendout battle-pokeball-sendout-${sendOutSide}`}
@@ -839,35 +921,40 @@ function BattleArena({
           </div>
         )}
         {!isSpectator && room.status === "active" && (
-          <div className="mb-4 flex gap-2 overflow-x-auto" role="tablist" aria-label="Battle commands">
-            <TabButton
-              active={tab === "moves"}
-              onClick={() => setTab("moves")}
-              icon={<Flame className="size-4" />}
-            >
-              Fight
-            </TabButton>
-            <TabButton
-              active={tab === "items"}
-              onClick={() => setTab("items")}
-              icon={<Package className="size-4" />}
-            >
-              Bag
-            </TabButton>
-            <TabButton
-              active={tab === "switch"}
-              onClick={() => setTab("switch")}
-              icon={<RotateCcw className="size-4" />}
-            >
-              Pokémon
-            </TabButton>
-            <TabButton
-              active={false}
+          <div className="battle-command-row mb-4">
+            <div className="battle-command-tabs" role="tablist" aria-label="Battle commands">
+              <TabButton
+                active={tab === "moves"}
+                onClick={() => setTab("moves")}
+                icon={<Flame className="size-4" />}
+              >
+                Fight
+              </TabButton>
+              <TabButton
+                active={tab === "items"}
+                onClick={() => setTab("items")}
+                icon={<Package className="size-4" />}
+              >
+                Bag
+              </TabButton>
+              <TabButton
+                active={tab === "switch"}
+                onClick={() => setTab("switch")}
+                icon={<RotateCcw className="size-4" />}
+              >
+                Pokémon
+              </TabButton>
+            </div>
+            <button
+              type="button"
               onClick={() => onAction({ type: "forfeit" })}
-              icon={<span aria-hidden="true" className="font-black">↗</span>}
+              disabled={mutationPending}
+              className="battle-run-button"
+              aria-label="Forfeit this battle"
             >
+              <DoorOpen className="size-4" />
               Run
-            </TabButton>
+            </button>
           </div>
         )}
         {isSpectator && (
@@ -890,7 +977,7 @@ function BattleArena({
               >
                 <span className="font-display text-base font-bold">{move.name}</span>
                 <span className="mt-1 text-[10px] uppercase tracking-[0.15em] text-cyan-200/70">
-                  {move.type} · {move.power || "status"}
+                  {move.type} · {move.power || "status"}{move.pp === undefined ? "" : ` · ${move.pp} PP`}
                 </span>
               </button>
             ))}
@@ -1294,10 +1381,25 @@ function PartyDot({ pokemon, active }: { pokemon: BattlePokemon | null; active: 
 }
 
 function RoomState({ icon, text }: { icon: ReactNode; text: string }) {
+  const loading = text.startsWith("Loading battle room");
   return (
-    <section className="hof-panel battle-empty flex min-h-52 flex-col items-center justify-center gap-3 p-8 text-center">
-      {icon}
-      <p className="max-w-md text-sm text-slate-300">{text}</p>
+    <section className={`hof-panel battle-empty ${loading ? "battle-entry-loading" : ""}`}>
+      {loading ? (
+        <div className="battle-anime-loading" role="status" aria-live="polite">
+          <img src="/pokemon-gifs/25.gif" alt="" fetchPriority="high" />
+          <div>
+            <p className="hof-kicker">AIDORU arena</p>
+            <h2>Entering the battle</h2>
+            <p>Loading both teams and the arena…</p>
+            <span className="battle-entry-progress"><i /></span>
+          </div>
+        </div>
+      ) : (
+        <>
+          {icon}
+          <p className="max-w-md text-sm text-slate-300">{text}</p>
+        </>
+      )}
     </section>
   );
 }
