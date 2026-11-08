@@ -56,10 +56,13 @@ function BattleRoomBody({ roomId }: { roomId: string }) {
   const queryClient = useQueryClient();
   const loadRoom = useServerFn(fetchBattleRoom);
   const act = useServerFn(applyBattleAction);
+  const battleQueryKey = ["aidoru", "battle-room", roomId] as const;
+  const actionPendingRef = useRef(false);
   const query = useQuery({
-    queryKey: ["aidoru", "battle-room", roomId],
+    queryKey: battleQueryKey,
     queryFn: () => loadRoom({ data: { roomId } }),
     refetchInterval: (current) => {
+      if (actionPendingRef.current) return false;
       const status = current.state.data?.status;
       return status === "active" ? 650 : status === "waiting" ? 2500 : false;
     },
@@ -67,7 +70,14 @@ function BattleRoomBody({ roomId }: { roomId: string }) {
   });
   const mutation = useMutation({
     mutationFn: (action: BattleAction) => act({ data: { roomId, action } }),
-    onSuccess: (room) => queryClient.setQueryData(["aidoru", "battle-room", roomId], room),
+    onMutate: async () => {
+      actionPendingRef.current = true;
+      await queryClient.cancelQueries({ queryKey: battleQueryKey });
+    },
+    onSuccess: (room) => queryClient.setQueryData(battleQueryKey, room),
+    onSettled: () => {
+      actionPendingRef.current = false;
+    },
   });
   const reactionMutation = useMutation({
     mutationFn: (emoji: string) => act({ data: { roomId, action: { type: "reaction", emoji } } }),
@@ -117,6 +127,8 @@ function BattleRoomBody({ roomId }: { roomId: string }) {
   }
 
   const perform = (action: BattleAction) => {
+    if (actionPendingRef.current) return;
+    actionPendingRef.current = true;
     setFlash(null);
     mutation.mutate(action, {
       onError: (error) =>
@@ -897,8 +909,6 @@ function BattleArena({
             <span />
           </div>
         )}
-        <div className="battle-platform platform-foe" />
-        <div className="battle-platform platform-me" />
         {damageSide && <BattleDamageBurst key={damageId} side={damageSide} amount={damageAmount} />}
         {faintSide && (
           <div
@@ -1290,13 +1300,13 @@ function BattleHud({
       </div>
       <div className="mt-2 h-2 overflow-hidden rounded-full bg-black/50">
         <div
-          className={`h-full rounded-full transition-all ${hp < 25 ? "bg-rose-400" : hp < 55 ? "bg-amber-300" : "bg-emerald-300"}`}
+          className={`battle-hp-fill h-full rounded-full ${hp < 25 ? "bg-rose-400" : hp < 55 ? "bg-amber-300" : "bg-emerald-300"}`}
           style={{ width: `${hp}%` }}
-            role="progressbar"
-            aria-label={`${pokemon.displayName} HP`}
-            aria-valuemin={0}
-            aria-valuemax={pokemon.maxHp}
-            aria-valuenow={Math.max(0, pokemon.hp)}
+          role="progressbar"
+          aria-label={`${pokemon.displayName} HP`}
+          aria-valuemin={0}
+          aria-valuemax={pokemon.maxHp}
+          aria-valuenow={Math.max(0, pokemon.hp)}
         />
       </div>
       <div className="mt-1 flex items-center justify-between font-mono-ui text-[10px] text-slate-300">

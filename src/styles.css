@@ -11004,6 +11004,28 @@
   .battle-room-action-button { min-height: 2.35rem; }
 }
 
+/* Resolve visible damage feedback quickly after a confirmed move. */
+.battle-hp-fill {
+  transition: width .2s linear !important;
+  will-change: width;
+}
+.battle-pokemon-hit img {
+  animation-duration: .24s !important;
+}
+.battle-impact {
+  animation-duration: .24s !important;
+}
+.battle-impact-core,
+.battle-impact i {
+  animation-duration: .28s !important;
+}
+.battle-damage-label {
+  animation-duration: .42s !important;
+}
+.battle-field-super-effective {
+  animation-duration: .32s !important;
+}
+
 /* ---------- Pokémon Journey: focused trainer and collection view ---------- */
 .journey-page {
   width: min(100%, 1120px);
