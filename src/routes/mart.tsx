@@ -49,6 +49,8 @@ function MartPage() {
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
   const [selectedItem, setSelectedItem] = useState<ShopItem | null>(null);
+  const [crystalBalanceOverride, setCrystalBalanceOverride] = useState<number | null>(null);
+  const currentCrystals = crystalBalanceOverride ?? user?.genesisCrystals ?? 0;
   const items = query.data ?? EMPTY_ITEMS;
   const categories = useMemo(
     () => ["all", ...Array.from(new Set(items.map((item) => item.category)))],
@@ -77,6 +79,7 @@ function MartPage() {
   const submitPurchase = async (data: { itemId: string; qty: number }) => {
     const result = await purchase({ data });
     writeSessionBalance(result.coins);
+    setCrystalBalanceOverride(result.genesisCrystals);
     toast.success("Bought " + result.itemName + " · -" + formatCoins(result.spent));
   };;
 
@@ -95,6 +98,11 @@ function MartPage() {
               <Landmark className="size-4" aria-hidden="true" />
               <span>Bank</span>
               <strong>{formatCoins(user?.bank ?? 0)}</strong>
+            </div>
+            <div className="storefront-balance">
+              <span aria-hidden="true">💎</span>
+              <span>Genesis Crystals</span>
+              <strong>{currentCrystals.toLocaleString()}</strong>
             </div>
           </div>
         </header>
@@ -136,6 +144,8 @@ function MartPage() {
                 <MartCard
                   key={item.id}
                   item={item}
+                  wallet={user?.coins ?? 0}
+                  crystals={currentCrystals}
                   onDetails={() => setSelectedItem(item)}
                   onBuy={(qty) => submitPurchase({ itemId: item.id, qty })}
                 />
@@ -173,7 +183,7 @@ function MartPage() {
                   name: selectedItem.name,
                   description: selectedItem.description,
                   category: selectedItem.category,
-                  price: `${formatCoins(selectedItem.price)} coins`,
+                  price: `${formatCoins(selectedItem.price)} coins${selectedItem.crystalCost ? ` + ${selectedItem.crystalCost} Genesis Crystals` : ""}`,
                   image: selectedItem.imageUrl ?? selectedItem.sprite,
                   rarity: selectedItem.rarity,
                 }
@@ -187,16 +197,23 @@ function MartPage() {
 
 function MartCard({
   item,
+  wallet,
+  crystals,
   onDetails,
   onBuy,
 }: {
   item: ShopItem;
+  wallet: number;
+  crystals: number;
   onDetails: () => void;
   onBuy: (qty: number) => Promise<void>;
 }) {
   const [qty, setQty] = useState(1);
   const buyMutation = useMutation({ mutationFn: onBuy, onError: (error: Error) => toast.error(error.message) });
   const image = item.imageUrl ?? item.sprite;
+  const affordable =
+    wallet >= item.price * qty &&
+    crystals >= Number(item.crystalCost ?? 0) * qty;
 
   return (
     <article className="hof-shop-card group">
@@ -227,6 +244,9 @@ function MartCard({
         <div className="storefront-price">
 
           <strong>{formatCoins(item.price)}</strong>
+          {Number(item.crystalCost) > 0 && (
+            <span>+ {((item.crystalCost ?? 0) * qty).toLocaleString()} Genesis Crystals</span>
+          )}
         </div>
       </div>
       <div className="storefront-card-actions flex shrink-0 flex-col gap-2">
@@ -253,7 +273,7 @@ function MartCard({
         <button
           type="button"
           onClick={() => buyMutation.mutate(qty)}
-          disabled={buyMutation.isPending}
+          disabled={buyMutation.isPending || !affordable}
           className="hof-button storefront-buy-button"
         >
           {buyMutation.isPending ? (

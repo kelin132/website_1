@@ -55,6 +55,7 @@ function EconomyShopPage() {
   const [page, setPage] = useState(1);
   const [selectedItem, setSelectedItem] = useState<EconomyShopItem | null>(null);
   const [bankTierOverride, setBankTierOverride] = useState<number | null>(null);
+  const [crystalBalanceOverride, setCrystalBalanceOverride] = useState<number | null>(null);
   const items = query.data ?? EMPTY_ITEMS;
   const categories = useMemo(
     () => Object.keys(ECONOMY_SHOP_CATEGORIES) as EconomyShopCategory[],
@@ -64,6 +65,7 @@ function EconomyShopPage() {
     0,
     Math.floor(Number(bankTierOverride ?? user?.bankUpgradeLevel ?? 0)),
   );
+  const currentCrystals = crystalBalanceOverride ?? user?.genesisCrystals ?? 0;
   const filtered = useMemo(() => {
     const normalizedSearch = search.trim().toLowerCase();
     return items.filter((item) => {
@@ -83,6 +85,7 @@ function EconomyShopPage() {
   const submitPurchase = async (data: { itemId: string; qty: number }) => {
     const result = await purchase({ data });
     writeSessionBalance(result.coins);
+    if (result.genesisCrystals !== undefined) setCrystalBalanceOverride(result.genesisCrystals);
     if (result.bankUpgradeLevel !== undefined) setBankTierOverride(result.bankUpgradeLevel);
     toast.success("Bought " + result.itemName + " · -" + formatCoins(result.spent));
   };;
@@ -102,6 +105,11 @@ function EconomyShopPage() {
               <Landmark className="size-4" aria-hidden="true" />
               <span>Bank</span>
               <strong>{formatCoins(user?.bank ?? 0)}</strong>
+            </div>
+            <div className="storefront-balance">
+              <span aria-hidden="true">💎</span>
+              <span>Genesis Crystals</span>
+              <strong>{(crystalBalanceOverride ?? user?.genesisCrystals ?? 0).toLocaleString()}</strong>
             </div>
           </div>
         </header>
@@ -145,6 +153,7 @@ function EconomyShopPage() {
                   key={item.id}
                   item={item}
                   wallet={user?.coins ?? 0}
+                  crystals={currentCrystals}
                   currentBankTier={currentBankTier}
                   onDetails={() => setSelectedItem(item)}
                   onBuy={(qty) => submitPurchase({ itemId: item.id, qty })}
@@ -202,7 +211,7 @@ function EconomyShopPage() {
                       ? [{ label: "Orbs required", value: String(selectedItem.orbCost) }]
                       : []),
                     ...(Number(selectedItem.gemCost) > 0
-                      ? [{ label: "Diamonds required", value: String(selectedItem.gemCost) }]
+                      ? [{ label: "Genesis Crystals required", value: String(selectedItem.gemCost) }]
                       : []),
                     ...(Number(selectedItem.xpBonus) > 0
                       ? [{ label: "XP gained", value: String(selectedItem.xpBonus) }]
@@ -217,9 +226,10 @@ function EconomyShopPage() {
   );
 }
 
-function EconomyShopCard({ item, wallet, currentBankTier, onDetails, onBuy }: {
+function EconomyShopCard({ item, wallet, crystals, currentBankTier, onDetails, onBuy }: {
   item: EconomyShopItem;
   wallet: number;
+  crystals: number;
   currentBankTier: number;
   onDetails: () => void;
   onBuy: (qty: number) => Promise<void>;
@@ -230,7 +240,9 @@ function EconomyShopCard({ item, wallet, currentBankTier, onDetails, onBuy }: {
   const oneAtATime = isService || item.id === "gun";
   const canBuyTier = !item.bankTier || item.bankTier === currentBankTier + 1;
   const alreadyOwned = Boolean(item.bankTier && item.bankTier <= currentBankTier);
-  const affordable = wallet >= item.price * qty;
+  const affordable =
+    wallet >= item.price * qty &&
+    crystals >= Number(item.gemCost ?? 0) * qty;
   const unavailable = buyMutation.isPending || !affordable || !canBuyTier || alreadyOwned;
   const actionLabel = alreadyOwned
     ? "Owned"
@@ -276,6 +288,9 @@ function EconomyShopCard({ item, wallet, currentBankTier, onDetails, onBuy }: {
         <div className="storefront-price">
 
           <strong>{formatCoins(item.price)}</strong>
+          {Number(item.gemCost) > 0 && (
+            <span>+ {((item.gemCost ?? 0) * qty).toLocaleString()} Genesis Crystals</span>
+          )}
         </div>
       </div>
       <div className="storefront-card-actions flex shrink-0 flex-col gap-2">

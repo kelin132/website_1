@@ -60,6 +60,7 @@ export type UserDoc = {
   bankUpgradeLevel?: number;
   vault?: number;
   orbs?: number;
+  genesisCrystals?: number;
   diamonds?: number;
   level?: number;
   xp?: number;

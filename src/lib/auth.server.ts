@@ -522,6 +522,8 @@ export async function toPublicUser(doc: UserDoc): Promise<PublicUser> {
   // Profile reads are read-only: never reset or migrate wallet fields here.
   const currentMoney = Number(doc.money) || 0;
   const currentBank = Number(doc.bank) || 0;
+  const currentGenesisCrystals =
+    (Number(doc.genesisCrystals) || 0) + (Number(doc.diamonds) || 0);
   const currentBankCard = doc.bankCard === true;
   const currentBankUpgradeLevel = Math.max(0, Math.min(5, Math.floor(Number(doc.bankUpgradeLevel) || 0)));
   const currentLevel = Math.max(1, Number(doc.level) || 1);
@@ -585,6 +587,7 @@ export async function toPublicUser(doc: UserDoc): Promise<PublicUser> {
     profileFrame: normalizeProfileFrame(doc.profileFrame),
     coins: currentMoney,
     bank: currentBank,
+    genesisCrystals: currentGenesisCrystals,
     bankLimit: Math.max(levelBankLimit, purchasedBankLimit),
     bankUpgradeLevel: currentBankUpgradeLevel,
     bankCard: currentBankCard,
@@ -752,6 +755,7 @@ export async function createWebsiteAccount(input: {
     bank: 0,
     vault: 0,
     orbs: 0,
+    genesisCrystals: 0,
     diamonds: 0,
     level: 1,
     xp: 0,
@@ -1525,6 +1529,7 @@ export async function completeDiscordLogin(input: {
           bank: 0,
           vault: 0,
           orbs: 0,
+          genesisCrystals: 0,
           diamonds: 0,
           level: 1,
           xp: 0,

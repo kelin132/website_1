@@ -78,6 +78,7 @@ export type ShopItem = {
     | "vitamin"
     | "mega";
   price: number;
+  crystalCost?: number;
   rarity: Rarity;
   description: string;
   sprite: string;
@@ -349,6 +350,7 @@ export type PublicUser = {
   profileBackground: string | null;
   profileFrame: string;
   coins: number;
+  genesisCrystals: number;
   bank: number;
   bankLimit: number;
   bankUpgradeLevel: number;

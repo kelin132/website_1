@@ -220,10 +220,18 @@ async function claimCooldown(
   return { ok: false, remainingMs: Math.max(0, cooldownMs - (now - last)) };
 }
 
-async function refundWallet(jid: string, amount: number) {
-  if (amount <= 0) return;
-  await (await users()).updateOne({ _id: jid }, { $inc: { money: amount } } as never);
+async function refundWallet(jid: string, amount: number, crystals = 0) {
+  if (amount <= 0 && crystals <= 0) return;
+  const increments: Record<string, number> = {};
+  if (amount > 0) increments.money = amount;
+  if (crystals > 0) increments.genesisCrystals = crystals;
+  await (await users()).updateOne({ _id: jid }, { $inc: increments } as never);
 }
+
+const MART_CRYSTAL_COSTS: Record<string, number> = {
+  beastball: 5,
+  masterball: 10,
+};
 
 export async function listShopItems(): Promise<ShopItem[]> {
   return BOT_MART_ITEMS.map((item) => ({
@@ -238,6 +246,7 @@ export async function listShopItems(): Promise<ShopItem[]> {
     emoji: item.emoji,
     page: item.page,
     index: item.index,
+    crystalCost: MART_CRYSTAL_COSTS[item.id] ?? 0,
     imageUrl: item.imageUrl,
   }));
 }
@@ -2619,7 +2628,7 @@ export async function claimHalloweenIslandReward(islandId: string) {
 export async function buyItem(input?: {
   itemId?: string;
   qty?: number;
-}): Promise<{ coins: number; itemName: string; spent: number }> {
+}): Promise<{ coins: number; itemName: string; spent: number; genesisCrystals: number }> {
   const user = await requireUser();
   const item = BOT_MART_ITEMS.find((entry) => entry.id === input?.itemId);
   if (!item) throw new Error("That Mart item is no longer available.");
@@ -2639,13 +2648,55 @@ export async function buyItem(input?: {
   if (item.id === "keystone" && existingQty > 0)
     throw new Error("Your trainer can only own one Keystone.");
   const spent = item.price * qty;
-  const wallet = await (
-    await users()
-  ).updateOne({ _id: userKey(user), registered: true, money: { $gte: spent } }, {
-    $inc: { money: -spent, xp: 3 },
-  } as never);
+  const crystalCost = (MART_CRYSTAL_COSTS[item.id] ?? 0) * qty;
+  const userCollection = await users();
+  const wallet = crystalCost > 0
+    ? await userCollection.updateOne(
+        {
+          _id: userKey(user),
+          registered: true,
+          money: { $gte: spent },
+          $expr: {
+            $gte: [
+              {
+                $add: [
+                  { $ifNull: ["$genesisCrystals", 0] },
+                  { $ifNull: ["$diamonds", 0] },
+                ],
+              },
+              crystalCost,
+            ],
+          },
+        } as never,
+        [{
+          $set: {
+            money: { $subtract: [{ $ifNull: ["$money", 0] }, spent] },
+            xp: { $add: [{ $ifNull: ["$xp", 0] }, 3] },
+            genesisCrystals: {
+              $subtract: [
+                {
+                  $add: [
+                    { $ifNull: ["$genesisCrystals", 0] },
+                    { $ifNull: ["$diamonds", 0] },
+                  ],
+                },
+                crystalCost,
+              ],
+            },
+            diamonds: 0,
+          },
+        }] as never,
+      )
+    : await userCollection.updateOne(
+        { _id: userKey(user), registered: true, money: { $gte: spent } },
+        { $inc: { money: -spent, xp: 3 } } as never,
+      );
   if (wallet.modifiedCount !== 1)
-    throw new Error("You do not have enough wallet coins for that purchase.");
+    throw new Error(
+      crystalCost > 0
+        ? "You need enough wallet coins and Genesis Crystals for that purchase."
+        : "You do not have enough wallet coins for that purchase.",
+    );
   try {
     const updated = await trainerCollection.updateOne(
       { _id: trainer["_id"] },
@@ -2653,15 +2704,26 @@ export async function buyItem(input?: {
     );
     if (updated.modifiedCount !== 1) throw new Error("Trainer inventory could not be updated.");
   } catch (error) {
-    await refundWallet(userKey(user), spent);
+    await refundWallet(userKey(user), spent, crystalCost);
     throw error;
   }
-  await appendHistory(userKey(user), "mart", -spent, `Bought ${qty} ${item.name}`);
+  await appendHistory(
+    userKey(user),
+    "mart",
+    -spent,
+    `Bought ${qty} ${item.name}${crystalCost > 0 ? ` for ${crystalCost} Genesis Crystals` : ""}`,
+  );
   const updatedUser = await (await users()).findOne(
     { _id: userKey(user) } as never,
-    { projection: { money: 1 } },
+    { projection: { money: 1, genesisCrystals: 1, diamonds: 1 } },
   );
-  return { coins: Number(updatedUser?.money) || 0, itemName: item.name, spent };
+  return {
+    coins: Number(updatedUser?.money) || 0,
+    genesisCrystals:
+      (Number(updatedUser?.genesisCrystals) || 0) + (Number(updatedUser?.diamonds) || 0),
+    itemName: item.name,
+    spent,
+  };
 }
 
 export async function listEconomyShopItems() {
@@ -2671,7 +2733,7 @@ export async function listEconomyShopItems() {
 export async function buyEconomyShopItem(input?: {
   itemId?: string;
   qty?: number;
-}): Promise<{ coins: number; itemName: string; spent: number; bankUpgradeLevel?: number }> {
+}): Promise<{ coins: number; itemName: string; spent: number; bankUpgradeLevel?: number; genesisCrystals?: number }> {
   const user = await requireUser();
   const item = ECONOMY_SHOP_ITEMS.find((entry) => entry.id === input?.itemId);
   if (!item) throw new Error("That Shop item is no longer available.");
@@ -2725,14 +2787,11 @@ export async function buyEconomyShopItem(input?: {
   const orbCost = item.orbCost * qty;
   const gemCost = item.gemCost * qty;
   if (Number(user.orbs ?? 0) < orbCost) throw new Error("You do not have enough orbs for that purchase.");
-  if (Number(user.diamonds ?? 0) < gemCost) throw new Error("You do not have enough diamonds for that purchase.");
 
   const filter: Record<string, unknown> = { _id: jid, registered: true, money: { $gte: spent } };
   if (orbCost > 0) filter["orbs"] = { $gte: orbCost };
-  if (gemCost > 0) filter["diamonds"] = { $gte: gemCost };
   const increments: Record<string, number> = { money: -spent };
   if (orbCost > 0) increments["orbs"] = -orbCost;
-  if (gemCost > 0) increments["diamonds"] = -gemCost;
   const xpReward = item.xpBonus * qty;
   if (xpReward > 0) increments["xp"] = xpReward;
   const set: Record<string, number> = {};
@@ -2741,6 +2800,77 @@ export async function buyEconomyShopItem(input?: {
     history: { $each: [historyEntry], $slice: -10 },
   };
   if (item.inventory) push["inventory"] = { $each: Array.from({ length: qty }, () => item.id) };
+
+  if (gemCost > 0) {
+    const crystalFilter = {
+      ...filter,
+      $expr: {
+        $gte: [
+          {
+            $add: [
+              { $ifNull: ["$genesisCrystals", 0] },
+              { $ifNull: ["$diamonds", 0] },
+            ],
+          },
+          gemCost,
+        ],
+      },
+    };
+    const crystalSet: Record<string, unknown> = {
+      money: { $subtract: [{ $ifNull: ["$money", 0] }, spent] },
+      genesisCrystals: {
+        $subtract: [
+          {
+            $add: [
+              { $ifNull: ["$genesisCrystals", 0] },
+              { $ifNull: ["$diamonds", 0] },
+            ],
+          },
+          gemCost,
+        ],
+      },
+      diamonds: 0,
+      history: {
+        $slice: [
+          { $concatArrays: [{ $ifNull: ["$history", []] }, [historyEntry]] },
+          -10,
+        ],
+      },
+    };
+    if (orbCost > 0) {
+      crystalSet["orbs"] = { $subtract: [{ $ifNull: ["$orbs", 0] }, orbCost] };
+    }
+    if (xpReward > 0) {
+      crystalSet["xp"] = { $add: [{ $ifNull: ["$xp", 0] }, xpReward] };
+    }
+    if (item.id === "gun") crystalSet["gunExpiry"] = now + 3 * 24 * 60 * 60 * 1000;
+    if (item.inventory) {
+      crystalSet["inventory"] = {
+        $concatArrays: [
+          { $ifNull: ["$inventory", []] },
+          Array.from({ length: qty }, () => item.id),
+        ],
+      };
+    }
+    const result = await userCollection.updateOne(
+      crystalFilter as never,
+      [{ $set: crystalSet }] as never,
+    );
+    if (result.modifiedCount !== 1) {
+      throw new Error("Your wallet or Genesis Crystal balance changed during checkout. Refresh and try again.");
+    }
+    const updatedUser = await userCollection.findOne(
+      { _id: jid } as never,
+      { projection: { money: 1, genesisCrystals: 1 } },
+    );
+    return {
+      coins: Number(updatedUser?.money) || 0,
+      itemName: item.name,
+      spent,
+      genesisCrystals: Number(updatedUser?.genesisCrystals) || 0,
+    };
+  }
+
   const update: Record<string, unknown> = { $inc: increments, $push: push };
   if (Object.keys(set).length > 0) update["$set"] = set;
   const result = await userCollection.updateOne(filter as never, update as never);
