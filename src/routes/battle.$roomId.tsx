@@ -42,6 +42,7 @@ function BattleRoomPage() {
     <AppShell
       title="Pokémon Battle"
       subtitle="Enter the arena, ready your party, or spectate the live battle."
+      hidePageHeading
     >
       <BattleRoomBody roomId={roomId} />
     </AppShell>
@@ -57,7 +58,7 @@ function BattleRoomBody({ roomId }: { roomId: string }) {
     queryFn: () => loadRoom({ data: { roomId } }),
     refetchInterval: (current) => {
       const status = current.state.data?.status;
-      return status === "active" ? 900 : status === "waiting" ? 2500 : false;
+      return status === "active" ? 650 : status === "waiting" ? 2500 : false;
     },
     retry: false,
   });
@@ -65,8 +66,21 @@ function BattleRoomBody({ roomId }: { roomId: string }) {
     mutationFn: (action: BattleAction) => act({ data: { roomId, action } }),
     onSuccess: (room) => queryClient.setQueryData(["aidoru", "battle-room", roomId], room),
   });
+  const reactionMutation = useMutation({
+    mutationFn: (emoji: string) => act({ data: { roomId, action: { type: "reaction", emoji } } }),
+    onSuccess: (nextRoom) => {
+      queryClient.setQueryData<BattleRoom>(["aidoru", "battle-room", roomId], (current) =>
+        current
+          ? {
+              ...current,
+              reactions: nextRoom.reactions,
+              spectators: nextRoom.spectators,
+            }
+          : nextRoom,
+      );
+    },
+  });
   const [flash, setFlash] = useState<string | null>(null);
-  const [spectatorView, setSpectatorView] = useState<"challenger" | "opponent">("challenger");
   const redirectedToLogin = useRef(false);
   const room = query.data;
 
@@ -106,30 +120,37 @@ function BattleRoomBody({ roomId }: { roomId: string }) {
         setFlash(error instanceof Error ? error.message : "That battle action failed."),
     });
   };
-  const isFinished = room.status === "finished";
   const isSpectator = room.joinedAs === "spectator";
   const me = room.joinedAs === "challenger" ? room.challenger : room.opponent;
   const foe = room.joinedAs === "challenger" ? room.opponent : room.challenger;
-  const viewedMe = isSpectator
-    ? spectatorView === "challenger" ? room.challenger : room.opponent
-    : me;
-  const viewedFoe = isSpectator
-    ? spectatorView === "challenger" ? room.opponent : room.challenger
-    : foe;
+  const viewedMe = isSpectator ? room.challenger : me;
+  const viewedFoe = isSpectator ? room.opponent : foe;
   const waitingForOpponent = !room.opponent;
   const waitingForReady = Boolean(room.opponent && room.status === "waiting");
   const forcedSwitch = room.forcedSwitch === room.joinedAs;
   const myTurn = room.turn === room.joinedAs;
+  const sendReaction = (emoji: string) => {
+    setFlash(null);
+    reactionMutation.mutate(emoji, {
+      onError: (error) =>
+        setFlash(error instanceof Error ? error.message : "That reaction could not be sent."),
+    });
+  };
   const shareUrl =
     typeof window === "undefined"
       ? ""
       : `${window.location.origin}/battle?room=${encodeURIComponent(room.code)}`;
 
   return (
-    <div className="aidoru-page aidoru-page-battle-room space-y-5 pb-12">
+    <div className={`aidoru-page aidoru-page-battle-room space-y-5 pb-12 ${isSpectator ? "battle-spectator-only" : ""}`}>
       <BattleMusic status={room.status} />
       <BattleEndSound status={room.status} winnerId={room.winnerId} playerId={me?.id ?? null} />
-      <section className="battle-room-toolbar hof-panel flex flex-wrap items-center justify-between gap-3 p-4 sm:p-5">
+      <BattleSoundscape
+        combatLog={room.combatLog}
+        status={room.status}
+        pokemon={[...room.challenger.party, ...(room.opponent?.party ?? [])]}
+      />
+      {!isSpectator && <section className="battle-room-toolbar hof-panel flex flex-wrap items-center justify-between gap-3 p-4 sm:p-5">
         <div className="flex items-center gap-3">
           <span className="battle-live-dot" />
           <div>
@@ -144,32 +165,6 @@ function BattleRoomBody({ roomId }: { roomId: string }) {
           </div>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <span className="battle-spectator-count" aria-label={`${room.spectators} spectators`}>
-            <Eye className="size-3.5" />
-            <strong>{room.spectators}</strong>
-            <span>watching</span>
-          </span>
-          {room.status === "active" && (
-            <div className="flex items-center gap-1.5" aria-label="Send a battle reaction">
-              {["🔥", "👏", "💙", "⚡", "😮", "😂"].map((emoji) => (
-                <button
-                  key={emoji}
-                  type="button"
-                  aria-label={`React ${emoji}`}
-                  disabled={mutation.isPending}
-                  onClick={() => perform({ type: "reaction", emoji })}
-                  className="rounded-full border border-white/10 bg-white/5 px-2 py-1 text-lg leading-none transition hover:scale-110 hover:bg-white/10 disabled:opacity-50"
-                >
-                  {emoji}
-                </button>
-              ))}
-            </div>
-          )}
-          <BattleSoundscape
-            combatLog={room.combatLog}
-            status={room.status}
-            pokemon={[...room.challenger.party, ...(room.opponent?.party ?? [])]}
-          />
           <button
             type="button"
             onClick={() =>
@@ -190,45 +185,11 @@ function BattleRoomBody({ roomId }: { roomId: string }) {
             All rooms
           </a>
         </div>
-        {room.status === "active" && room.reactions?.length > 0 && (
-          <div className="mt-2 flex min-h-9 flex-wrap items-center gap-2" aria-live="polite" aria-label="Recent battle reactions">
-            {room.reactions
-              .filter((reaction) => Date.now() - reaction.createdAt < 9_000)
-              .slice(-8)
-              .map((reaction, index) => (
-                <span
-                  key={`${reaction.createdAt}-${index}`}
-                  className="animate-bounce rounded-full border border-white/10 bg-slate-950/70 px-3 py-1 text-2xl shadow-lg"
-                  aria-label="Battle reaction"
-                >
-                  {reaction.emoji}
-                </span>
-              ))}
-          </div>
-        )}
       </section>
+      }
 
-      {waitingForOpponent && <WaitingRoomCard room={room} />}
-      {isSpectator && (
-        <section className="battle-spectator-banner">
-          <Eye className="size-5 text-cyan-200" />
-          <div>
-            <p className="font-display text-lg font-bold text-cyan-100">Spectate mode</p>
-            <p className="text-sm text-slate-300">
-              You are watching this room read-only. Trainers keep control of their Pokémon.
-            </p>
-          </div>
-          <button
-            type="button"
-            onClick={() => setSpectatorView((side) => side === "challenger" ? "opponent" : "challenger")}
-            className="hof-button-secondary ml-auto inline-flex items-center gap-2 px-3 py-2 text-xs"
-          >
-            <RotateCcw className="size-3" />
-            View {spectatorView === "challenger" ? "opponent" : "challenger"}
-          </button>
-        </section>
-      )}
-      {waitingForReady && (
+      {!isSpectator && waitingForOpponent && <WaitingRoomCard room={room} />}
+      {!isSpectator && waitingForReady && (
         <section className="battle-ready-banner hof-panel p-5">
           <p className="hof-kicker">Both parties loaded</p>
           <h2 className="hof-heading mt-1 text-3xl">Waiting for both trainers.</h2>
@@ -246,21 +207,10 @@ function BattleRoomBody({ roomId }: { roomId: string }) {
         forcedSwitch={forcedSwitch}
         isSpectator={isSpectator}
         mutationPending={mutation.isPending}
+        reactionPending={reactionMutation.isPending}
         onAction={perform}
+        onReaction={sendReaction}
       />
-      {isFinished && (
-        <details className="battle-finished-log hof-panel p-4 sm:p-6" open>
-          <summary className="cursor-pointer font-display text-lg font-bold">Match log</summary>
-          <ol className="mt-4 space-y-2">
-            {room.combatLog.map((entry, index) => (
-              <li key={`${index}-${entry}`} className="font-bold text-slate-100">
-                <span className="mr-2 text-cyan-200">{String(index + 1).padStart(2, "0")}</span>
-                {entry}
-              </li>
-            ))}
-          </ol>
-        </details>
-      )}
       {flash && (
         <p className="rounded-xl border border-rose-300/20 bg-rose-300/10 px-4 py-3 text-sm text-rose-100">
           {flash}
@@ -614,7 +564,9 @@ function BattleArena({
   forcedSwitch,
   isSpectator,
   mutationPending,
+  reactionPending,
   onAction,
+  onReaction,
 }: {
   room: BattleRoom;
   me: BattleTrainer | null;
@@ -623,7 +575,9 @@ function BattleArena({
   forcedSwitch: boolean;
   isSpectator: boolean;
   mutationPending: boolean;
+  reactionPending: boolean;
   onAction: (action: BattleAction) => void;
+  onReaction: (emoji: string) => void;
 }) {
   const activeMe = me?.party[me.activeIndex] ?? null;
   const activeFoe = foe?.party[foe.activeIndex] ?? null;
@@ -804,6 +758,11 @@ function BattleArena({
         <div className="battle-arena-meta">
           {room.status === "active" && <span className="battle-round-chip">ROUND {room.round}</span>}
           <span className="battle-turn-label" role="status">{statusText}</span>
+          <span className="battle-spectator-count" aria-label={`${room.spectators} spectators`}>
+            <Eye className="size-3.5" />
+            <strong>{room.spectators}</strong>
+            <span>watching</span>
+          </span>
           {room.gym && (
             <span className="battle-gym-chip" style={{ "--gym-accent": room.gym.accent } as CSSProperties}>
               <span>{room.gym.type} arena</span>
@@ -811,6 +770,23 @@ function BattleArena({
             </span>
           )}
         </div>
+        {room.status === "active" && (
+          <div className="battle-reaction-dock" aria-label="Send a battle reaction">
+            <span className="battle-reaction-label">React</span>
+            {["🔥", "👏", "💙", "⚡", "😮", "😂"].map((emoji) => (
+              <button
+                key={emoji}
+                type="button"
+                aria-label={`React ${emoji}`}
+                disabled={reactionPending}
+                onClick={() => onReaction(emoji)}
+                className="battle-reaction-button"
+              >
+                {emoji}
+              </button>
+            ))}
+          </div>
+        )}
 
       </div>
       <div className="battle-message-strip font-bold" role="status" aria-live="polite">
@@ -830,6 +806,22 @@ function BattleArena({
             aria-hidden="true"
           />
         )}
+        {room.status === "active" && (
+          <div className="battle-reaction-floats" aria-live="polite" aria-label="Live battle reactions">
+            {(room.reactions ?? [])
+              .filter((reaction) => Date.now() - reaction.createdAt < 4_000)
+              .slice(-7)
+              .map((reaction) => (
+                <span
+                  key={`${reaction.userId}-${reaction.createdAt}`}
+                  className="battle-reaction-float"
+                  aria-label={`Battle reaction ${reaction.emoji}`}
+                >
+                  {reaction.emoji}
+                </span>
+              ))}
+          </div>
+        )}
         <div className="battle-field-caption" aria-hidden="true">
           <span>{room.gym ? `${room.gym.name} · ${room.gym.type} arena` : "AIDORU battle field"}</span>
           <span>{room.status === "active" ? `ROUND ${room.round}` : room.status === "finished" ? "RESULT" : "ARENA READY"}</span>
@@ -847,22 +839,22 @@ function BattleArena({
           </div>
         )}
         {superEffectiveActive && <SuperEffectiveBurst key={superEffectiveId} />}
-        {activeFoe && (
+        {activeFoe && activeFoe.hp > 0 && (
           <BattlePokemonSprite
             key={`foe-${activeFoe.id}`}
             pokemon={activeFoe}
             side="foe"
-            defeated={activeFoe.hp <= 0}
+            defeated={false}
             hit={damageSide === "foe"}
             sendOut={sendOutSide === "foe"}
           />
         )}
-        {activeMe && (
+        {activeMe && activeMe.hp > 0 && (
           <BattlePokemonSprite
             key={`me-${activeMe.id}`}
             pokemon={activeMe}
             side="me"
-            defeated={activeMe.hp <= 0}
+            defeated={false}
             hit={damageSide === "me"}
             sendOut={sendOutSide === "me"}
           />
@@ -901,8 +893,8 @@ function BattleArena({
         {transitionId > 0 && <BattleParticleTransition key={transitionId} />}
       </div>
 
-      <div className="battle-controls border-t border-white/10 bg-black/25 p-4 sm:p-6">
-        <div className="mb-4 flex items-center justify-between gap-3">
+      {!isSpectator && <div className="battle-controls border-t border-white/10 bg-black/25 p-4 sm:p-6">
+        {!isSpectator && <div className="mb-4 flex items-center justify-between gap-3">
           <div>
             <p className="hof-kicker">{room.gym ? `${room.gym.name} · Leader ${room.gym.leader}` : "Command console"}</p>
             <p className="mt-1 text-sm text-slate-300">
@@ -911,8 +903,8 @@ function BattleArena({
                 : "Select a move or switch your active Pokémon."}
             </p>
           </div>
-        </div>
-        {room.status === "waiting" && (
+        </div>}
+        {!isSpectator && room.status === "waiting" && (
           <div className="battle-spectator-note">
             <Radio className="size-4 text-cyan-200" />
             {room.opponent
@@ -922,7 +914,7 @@ function BattleArena({
         )}
         {!isSpectator && room.status === "active" && (
           <div className="battle-command-row mb-4">
-            <div className="battle-command-tabs" role="tablist" aria-label="Battle commands">
+            <div className="battle-command-tabs" role="group" aria-label="Battle commands">
               <TabButton
                 active={tab === "moves"}
                 onClick={() => setTab("moves")}
@@ -944,24 +936,17 @@ function BattleArena({
               >
                 Pokémon
               </TabButton>
+              <button
+                type="button"
+                onClick={() => onAction({ type: "forfeit" })}
+                disabled={mutationPending}
+                className="battle-run-button battle-command-run"
+                aria-label="Forfeit this battle"
+              >
+                <DoorOpen className="size-4" />
+                Run
+              </button>
             </div>
-            <button
-              type="button"
-              onClick={() => onAction({ type: "forfeit" })}
-              disabled={mutationPending}
-              className="battle-run-button"
-              aria-label="Forfeit this battle"
-            >
-              <DoorOpen className="size-4" />
-              Run
-            </button>
-          </div>
-        )}
-        {isSpectator && (
-          <div className="battle-spectator-note">
-            <Radio className="size-4 text-cyan-200" />
-            Spectator mode is read-only. Share the room URL with another trainer to fill the next
-            seat.
           </div>
         )}
         {!isSpectator && tab === "moves" && (
@@ -973,7 +958,7 @@ function BattleArena({
                 onClick={() => onAction({ type: "move", moveIndex: index })}
                 disabled={!canAct || forcedSwitch}
                 aria-label={`${move.name}, ${move.type} type, power ${move.power || "status"}${move.pp === undefined ? "" : `, ${move.pp} PP`}`}
-                className="battle-move-button"
+                className={`battle-move-button battle-type-${move.type.toLowerCase().replace(/[^a-z0-9-]/g, "")}`}
               >
                 <span className="font-display text-base font-bold">{move.name}</span>
                 <span className="mt-1 text-[10px] uppercase tracking-[0.15em] text-cyan-200/70">
@@ -1002,9 +987,9 @@ function BattleArena({
             ))}
           </div>
         )}
-      </div>
+      </div>}
 
-      {room.status === "finished" && (
+      {!isSpectator && room.status === "finished" && (
         <div className="battle-winner-banner" role="status" aria-live="polite">
           <Swords className="size-5" />
           <div>
@@ -1014,7 +999,7 @@ function BattleArena({
           <Swords className="size-5" />
         </div>
       )}
-      <div className="grid gap-4 border-t border-white/10 bg-[#061019]/85 p-4 sm:grid-cols-[1fr_1.35fr] sm:p-6">
+      <div className={`battle-arena-lower ${isSpectator ? "battle-arena-lower-spectator" : ""}`}>
         <div>
           <p className="hof-kicker">Battle log</p>
           <div className="battle-log mt-2">
@@ -1028,7 +1013,7 @@ function BattleArena({
               )) : <p className="battle-log-empty">Combat events will appear here once the match begins.</p>}
           </div>
         </div>
-        <div>
+        {!isSpectator && <div>
           <p className="hof-kicker">Party status</p>
           <div className="mt-2 grid grid-cols-3 gap-2 sm:grid-cols-6">
             {Array.from({ length: 6 }, (_, index) => (
@@ -1039,7 +1024,7 @@ function BattleArena({
               />
             ))}
           </div>
-        </div>
+        </div>}
       </div>
     </section>
   );
@@ -1285,8 +1270,7 @@ function TabButton({
       type="button"
       onClick={onClick}
       className={`battle-tab ${active ? "battle-tab-active" : ""}`}
-      role="tab"
-      aria-selected={active}
+      aria-pressed={active}
     >
       {icon}
       {children}
