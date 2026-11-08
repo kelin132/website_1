@@ -111,7 +111,7 @@ export const getSession = createServerFn({ method: "GET" }).handler(
 );
 
 export const phoneLogin = createServerFn({ method: "POST" })
-  .inputValidator((data) =>
+  .validator((data) =>
     z
       .object({
         countryCode: z.string().min(1).max(4),
@@ -123,7 +123,7 @@ export const phoneLogin = createServerFn({ method: "POST" })
   .handler(({ data }) => beginPhoneLogin(data));
 
 export const websiteIdLogin = createServerFn({ method: "POST" })
-  .inputValidator((data) =>
+  .validator((data) =>
     z
       .object({
         websiteId: z.string().min(1).max(32),
@@ -134,7 +134,7 @@ export const websiteIdLogin = createServerFn({ method: "POST" })
   .handler(({ data }) => loginUser(data));
 
 export const createAccount = createServerFn({ method: "POST" })
-  .inputValidator((data) =>
+  .validator((data) =>
     z
       .object({
         countryCode: z.string().min(1).max(4),
@@ -147,7 +147,7 @@ export const createAccount = createServerFn({ method: "POST" })
   .handler(({ data }) => createWebsiteAccount(data));
 
 export const verifyPhone = createServerFn({ method: "POST" })
-  .inputValidator((data) =>
+  .validator((data) =>
     z
       .object({
         countryCode: z.string().min(1).max(4),
@@ -159,7 +159,7 @@ export const verifyPhone = createServerFn({ method: "POST" })
   .handler(({ data }) => completePhoneVerification(data));
 
 export const requestPasswordReset = createServerFn({ method: "POST" })
-  .inputValidator((data) =>
+  .validator((data) =>
     z
       .object({
         countryCode: z.string().min(1).max(4),
@@ -171,7 +171,7 @@ export const requestPasswordReset = createServerFn({ method: "POST" })
   .handler(({ data }) => beginPasswordReset(data));
 
 export const resetPassword = createServerFn({ method: "POST" })
-  .inputValidator((data) =>
+  .validator((data) =>
     z
       .object({
         countryCode: z.string().min(1).max(4),
@@ -183,7 +183,7 @@ export const resetPassword = createServerFn({ method: "POST" })
   .handler(({ data }) => completePasswordReset(data));
 
 export const requestOtpCode = createServerFn({ method: "POST" })
-  .inputValidator((data) =>
+  .validator((data) =>
     z
       .object({
         websiteId: z.string().min(8).max(32).optional(),
@@ -207,7 +207,7 @@ export const requestOtpCode = createServerFn({ method: "POST" })
   });
 
 export const verifyOtp = createServerFn({ method: "POST" })
-  .inputValidator((data) =>
+  .validator((data) =>
     z
       .object({
         websiteId: z.string().min(8).max(32),
@@ -218,7 +218,7 @@ export const verifyOtp = createServerFn({ method: "POST" })
   .handler(({ data }) => verifyOtpForReset(data));
 
 export const resetPasswordWithCode = createServerFn({ method: "POST" })
-  .inputValidator((data) =>
+  .validator((data) =>
     z
       .object({
         websiteId: z.string().min(8).max(32),
@@ -234,13 +234,13 @@ export const startDiscordAccountLink = createServerFn({ method: "POST" }).handle
 );
 
 export const finishDiscordAccountLink = createServerFn({ method: "POST" })
-  .inputValidator((data) =>
+  .validator((data) =>
     z.object({ code: z.string().min(1).max(2048), state: z.string().min(1).max(256) }).parse(data),
   )
   .handler(({ data }) => completeDiscordLink(data));
 
 export const finishDiscordCallback = createServerFn({ method: "POST" })
-  .inputValidator((data) =>
+  .validator((data) =>
     z.object({ code: z.string().min(1).max(2048), state: z.string().min(1).max(256) }).parse(data),
   )
   .handler(({ data }) => completeDiscordCallback(data));
@@ -250,13 +250,13 @@ export const startDiscordWebsiteLogin = createServerFn({ method: "POST" }).handl
 );
 
 export const finishDiscordWebsiteLogin = createServerFn({ method: "POST" })
-  .inputValidator((data) =>
+  .validator((data) =>
     z.object({ code: z.string().min(1).max(2048), state: z.string().min(1).max(256) }).parse(data),
   )
   .handler(({ data }) => completeDiscordLogin(data));
 
 export const linkDiscordWebsiteAccount = createServerFn({ method: "POST" })
-  .inputValidator((data) =>
+  .validator((data) =>
     z
       .object({
         websiteId: z.string().min(1).max(32),
@@ -284,12 +284,12 @@ export const fetchShopItems = createServerFn({ method: "GET" }).handler(() => li
 export const fetchEconomyShopItems = createServerFn({ method: "GET" }).handler(() => listEconomyShopItems());
 
 export const purchaseEconomyShopItem = createServerFn({ method: "POST" })
-  .inputValidator((data) => z.object({ itemId: z.string().min(1).max(40), qty: z.number().int().min(1).max(99) }).parse(data))
+  .validator((data) => z.object({ itemId: z.string().min(1).max(40), qty: z.number().int().min(1).max(99) }).parse(data))
   .handler(({ data }) => buyEconomyShopItem(data));
 
 
 export const joinHalloweenDuo = createServerFn({ method: "POST" })
-  .inputValidator((data) =>
+  .validator((data) =>
     z.object({
       islandId: z.string().min(1).max(40),
       weaponId: z.enum(["moonshot", "spirit-burst", "foxfire"]),
@@ -299,7 +299,7 @@ export const joinHalloweenDuo = createServerFn({ method: "POST" })
   .handler(({ data }) => joinHalloweenDuoQueue(data));
 
 export const sendHalloweenDuoInvitation = createServerFn({ method: "POST" })
-  .inputValidator((data) => z.object({
+  .validator((data) => z.object({
     targetId: z.string().min(1).max(128),
     islandId: z.string().min(1).max(40),
     weaponId: z.enum(["moonshot", "spirit-burst", "foxfire"]),
@@ -308,7 +308,7 @@ export const sendHalloweenDuoInvitation = createServerFn({ method: "POST" })
   .handler(({ data }) => sendHalloweenDuoInvite(data));
 
 export const respondToHalloweenDuoInvitation = createServerFn({ method: "POST" })
-  .inputValidator((data) => z.object({
+  .validator((data) => z.object({
     inviteId: z.string().min(1).max(128),
     accept: z.boolean(),
     weaponId: z.enum(["moonshot", "spirit-burst", "foxfire"]),
@@ -329,7 +329,7 @@ export const cancelHalloweenDuo = createServerFn({ method: "POST" }).handler(() 
 );
 
 export const heartbeatHalloweenDuoMatch = createServerFn({ method: "POST" })
-  .inputValidator((data) =>
+  .validator((data) =>
     z.object({
       x: z.number().min(0).max(1),
       y: z.number().min(0).max(1),
@@ -341,7 +341,7 @@ export const heartbeatHalloweenDuoMatch = createServerFn({ method: "POST" })
   .handler(({ data }) => heartbeatHalloweenDuo(data));
 
 export const claimHalloweenCrate = createServerFn({ method: "POST" })
-  .inputValidator((data) =>
+  .validator((data) =>
     z.object({ islandId: z.string().min(1).max(40), crateId: z.string().regex(/^crate-[1-8]$/) }).parse(data),
   )
   .handler(({ data }) => claimHalloweenCrateReward(data));
@@ -388,13 +388,13 @@ export const fetchGymsLeaderboard = createServerFn({ method: "GET" }).handler(()
 );
 
 export const fetchMyCards = createServerFn({ method: "GET" })
-  .inputValidator((data) =>
+  .validator((data) =>
     z.object({ scope: z.enum(["mine", "global"]).default("mine") }).parse(data ?? {}),
   )
   .handler(({ data }) => (data.scope === "global" ? listCards("global") : listMyCards()));
 
 export const searchAuctionCards = createServerFn({ method: "GET" })
-  .inputValidator((data) => z.object({ query: z.string().trim().min(2).max(80) }).parse(data))
+  .validator((data) => z.object({ query: z.string().trim().min(2).max(80) }).parse(data))
   .handler(({ data }) => searchGlobalCards(data.query));
 
 export const fetchMyCardCount = createServerFn({ method: "GET" }).handler(() => countMyCards());
@@ -402,7 +402,7 @@ export const fetchMyCardCount = createServerFn({ method: "GET" }).handler(() => 
 export const fetchMyCardDecks = createServerFn({ method: "GET" }).handler(() => listMyCardDecks());
 
 export const saveMyCardDecks = createServerFn({ method: "POST" })
-  .inputValidator((data) => z.object({
+  .validator((data) => z.object({
     decks: z.array(z.object({
       id: z.string().trim().min(1).max(64),
       name: z.string().trim().min(1).max(32),
@@ -414,13 +414,13 @@ export const saveMyCardDecks = createServerFn({ method: "POST" })
 export const fetchCardMarket = createServerFn({ method: "GET" }).handler(() => listCardMarket());
 
 export const buyCardListing = createServerFn({ method: "POST" })
-  .inputValidator((data) => z.object({ listingId: z.string().min(1).max(128) }).parse(data))
+  .validator((data) => z.object({ listingId: z.string().min(1).max(128) }).parse(data))
   .handler(({ data }) => purchaseCardListing(data.listingId));
 
 export const fetchAuctionBoard = createServerFn({ method: "GET" }).handler(() => getAuctionBoard());
 
 export const bidOnAuctionCard = createServerFn({ method: "POST" })
-  .inputValidator((data) =>
+  .validator((data) =>
     z.object({
       auctionId: z.string().min(1).max(64),
       amount: z.number().int().positive().max(500_000_000_000),
@@ -429,7 +429,7 @@ export const bidOnAuctionCard = createServerFn({ method: "POST" })
   .handler(({ data }) => placeWebAuctionBid(data.auctionId, data.amount));
 
 export const uploadUpcomingAuctionCard = createServerFn({ method: "POST" })
-  .inputValidator((data) =>
+  .validator((data) =>
     z.object({
       name: z.string().trim().min(1).max(80),
       series: z.string().trim().min(1).max(80),
@@ -449,7 +449,7 @@ export const uploadUpcomingAuctionCard = createServerFn({ method: "POST" })
   .handler(({ data }) => createUpcomingAuctionCard(data));
 
 export const uploadUpcomingAuctionCardBatch = createServerFn({ method: "POST" })
-  .inputValidator((data) =>
+  .validator((data) =>
     z.object({
       cards: z.array(z.object({
         name: z.string().trim().min(1).max(80),
@@ -473,7 +473,7 @@ export const uploadUpcomingAuctionCardBatch = createServerFn({ method: "POST" })
   );
 
 export const updateUpcomingAuctionCardPrice = createServerFn({ method: "POST" })
-  .inputValidator((data) =>
+  .validator((data) =>
     z.object({
       auctionId: z.string().min(1).max(64),
       startingBid: z.number().int().min(1).max(500_000_000_000),
@@ -485,42 +485,42 @@ export const updateUpcomingAuctionCardPrice = createServerFn({ method: "POST" })
   );
 
 export const startAuctionBatch = createServerFn({ method: "POST" })
-  .inputValidator((data) => z.object({
+  .validator((data) => z.object({
     category: z.string().trim().min(1).max(32).nullable().optional(),
     count: z.number().int().min(2).max(12).optional(),
   }).parse(data ?? {}))
   .handler(({ data }) => startUpcomingAuctionBatch(data));
 
 export const restartEndedAuctionCard = createServerFn({ method: "POST" })
-  .inputValidator((data) => z.object({ auctionId: z.string().min(1).max(64) }).parse(data))
+  .validator((data) => z.object({ auctionId: z.string().min(1).max(64) }).parse(data))
   .handler(({ data }) => restartEndedWebAuction(data.auctionId));
 
 export const removeEndedAuctionCard = createServerFn({ method: "POST" })
-  .inputValidator((data) => z.object({ auctionId: z.string().min(1).max(64) }).parse(data))
+  .validator((data) => z.object({ auctionId: z.string().min(1).max(64) }).parse(data))
   .handler(({ data }) => removeEndedWebAuction(data.auctionId));
 
 export const fetchMyPets = createServerFn({ method: "GET" }).handler(() => listMyPets());
 
 export const feedMyPet = createServerFn({ method: "POST" })
-  .inputValidator((data) => z.object({ petId: z.string().min(1).max(16) }).parse(data))
+  .validator((data) => z.object({ petId: z.string().min(1).max(16) }).parse(data))
   .handler(({ data }) => feedPet(data.petId));
 
 export const playWithPet = createServerFn({ method: "POST" })
-  .inputValidator((data) => z.object({ petId: z.string().min(1).max(16) }).parse(data))
+  .validator((data) => z.object({ petId: z.string().min(1).max(16) }).parse(data))
   .handler(({ data }) => playPet(data.petId));
 
 export const hatchMyPet = createServerFn({ method: "POST" }).handler(() => hatchPet());
 
 export const selectMyPet = createServerFn({ method: "POST" })
-  .inputValidator((data) => z.object({ petId: z.string().min(1).max(16) }).parse(data))
+  .validator((data) => z.object({ petId: z.string().min(1).max(16) }).parse(data))
   .handler(({ data }) => selectPet(data.petId));
 
 export const releaseMyPet = createServerFn({ method: "POST" })
-  .inputValidator((data) => z.object({ petId: z.string().min(1).max(16) }).parse(data))
+  .validator((data) => z.object({ petId: z.string().min(1).max(16) }).parse(data))
   .handler(({ data }) => releasePet(data.petId));
 
 export const buyPetCareItem = createServerFn({ method: "POST" })
-  .inputValidator((data) =>
+  .validator((data) =>
     z
       .object({
         itemKey: z.enum([
@@ -544,7 +544,7 @@ export const buyPetCareItem = createServerFn({ method: "POST" })
   .handler(({ data }) => buyPetCare(data.itemKey, data.petId));
 
 export const saveProfile = createServerFn({ method: "POST" })
-  .inputValidator((data) =>
+  .validator((data) =>
     z
       .object({
         name: z.string().min(2).max(32).optional(),
@@ -563,7 +563,7 @@ export const saveProfile = createServerFn({ method: "POST" })
   .handler(({ data }) => updateProfile(data));
 
 export const uploadProfileVideo = createServerFn({ method: "POST" })
-  .inputValidator((data) =>
+  .validator((data) =>
     z
       .object({
         videoBase64: z.string().min(1).max(14_000_000),
@@ -574,7 +574,7 @@ export const uploadProfileVideo = createServerFn({ method: "POST" })
   .handler(({ data }) => uploadProfileVideoMutation(data));
 
 export const pickStarter = createServerFn({ method: "POST" })
-  .inputValidator((data) => z.object({ starterId: z.string().max(40) }).parse(data))
+  .validator((data) => z.object({ starterId: z.string().max(40) }).parse(data))
   .handler(({ data }) => chooseStarter(data.starterId));
 
 export const claimDailyReward = createServerFn({ method: "POST" }).handler(() => claimDaily());
@@ -584,7 +584,7 @@ export const claimWebsiteDailyReward = createServerFn({ method: "POST" }).handle
 );
 
 export const purchaseItem = createServerFn({ method: "POST" })
-  .inputValidator((data) =>
+  .validator((data) =>
     z.object({ itemId: z.string().max(40), qty: z.number().int().min(1).max(99) }).parse(data),
   )
   .handler(({ data }) => buyItem(data));
@@ -592,11 +592,11 @@ export const purchaseItem = createServerFn({ method: "POST" })
 export const fetchGuilds = createServerFn({ method: "GET" }).handler(() => listGuilds());
 
 export const requestJoinGuild = createServerFn({ method: "POST" })
-  .inputValidator((data) => z.object({ guildId: z.string().max(40) }).parse(data))
+  .validator((data) => z.object({ guildId: z.string().max(40) }).parse(data))
   .handler(({ data }) => applyToGuild(data.guildId));
 
 export const reviewGuildApplication = createServerFn({ method: "POST" })
-  .inputValidator((data) =>
+  .validator((data) =>
     z.object({ applicationId: z.string().min(1).max(256), action: z.enum(["approve", "reject"]) }).parse(data),
   )
   .handler(({ data }) => reviewGuildApplicationMutation(data.applicationId, data.action));
@@ -604,7 +604,7 @@ export const reviewGuildApplication = createServerFn({ method: "POST" })
 export const requestLeaveGuild = createServerFn({ method: "POST" }).handler(() => leaveGuild());
 
 export const charterGuild = createServerFn({ method: "POST" })
-  .inputValidator((data) =>
+  .validator((data) =>
     z
       .object({
         name: z.string().min(3).max(32),
@@ -619,7 +619,7 @@ export const charterGuild = createServerFn({ method: "POST" })
 export const upgradeMyGuild = createServerFn({ method: "POST" }).handler(() => upgradeGuild());
 
 export const updateGuildSettings = createServerFn({ method: "POST" })
-  .inputValidator((data) =>
+  .validator((data) =>
     z
       .object({
         description: z.string().max(200).optional(),
@@ -635,7 +635,7 @@ export const updateGuildSettings = createServerFn({ method: "POST" })
   }));
 
 export const adminRemoveGuild = createServerFn({ method: "POST" })
-  .inputValidator((data) => z.object({ guildId: z.string().min(1).max(128) }).parse(data))
+  .validator((data) => z.object({ guildId: z.string().min(1).max(128) }).parse(data))
   .handler(({ data }) => removeGuildAsAdmin(data.guildId));
 
 export const adminBalanceGuildMembers = createServerFn({ method: "POST" }).handler(() =>
@@ -643,7 +643,7 @@ export const adminBalanceGuildMembers = createServerFn({ method: "POST" }).handl
 );
 
 export const flipCoin = createServerFn({ method: "POST" })
-  .inputValidator((data) =>
+  .validator((data) =>
       z
       .object({ wager: z.number().int().min(10).max(5000000), pick: z.enum(["heads", "tails"]) })
       .parse(data),
@@ -651,33 +651,33 @@ export const flipCoin = createServerFn({ method: "POST" })
   .handler(({ data }) => playCoinFlip(data));
 
 export const spinSlots = createServerFn({ method: "POST" })
-  .inputValidator((data) => z.object({ wager: z.number().int().min(50).max(5000000) }).parse(data))
+  .validator((data) => z.object({ wager: z.number().int().min(50).max(5000000) }).parse(data))
   .handler(({ data }) => playSlots(data));
 
 export const placeBet = createServerFn({ method: "POST" })
-  .inputValidator((data) =>
+  .validator((data) =>
     z.object({ wager: z.number().int().min(10).max(5000000) }).parse(data),
   )
   .handler(({ data }) => playBet(data));
 
 export const throwDice = createServerFn({ method: "POST" })
-  .inputValidator((data) =>
+  .validator((data) =>
     z.object({ wager: z.number().int().min(50).max(5000000), guess: z.number().int().min(1).max(6) }).parse(data),
   )
   .handler(({ data }) => playDice(data));
 
 export const spinRoulette = createServerFn({ method: "POST" })
-  .inputValidator((data) =>
+  .validator((data) =>
     z.object({ wager: z.number().int().min(100).max(5000000), color: z.enum(["red", "black", "green"]) }).parse(data),
   )
   .handler(({ data }) => playRoulette(data));
 
 export const setLead = createServerFn({ method: "POST" })
-  .inputValidator((data) => z.object({ pokemonId: z.string().min(1).max(64) }).parse(data))
+  .validator((data) => z.object({ pokemonId: z.string().min(1).max(64) }).parse(data))
   .handler(({ data }) => setLeadPokemon(data.pokemonId));
 
 export const reorderParty = createServerFn({ method: "POST" })
-  .inputValidator((data) =>
+  .validator((data) =>
     z
       .object({ first: z.number().int().min(1).max(6), second: z.number().int().min(1).max(6) })
       .parse(data),
@@ -685,7 +685,7 @@ export const reorderParty = createServerFn({ method: "POST" })
   .handler(({ data }) => swapParty(data));
 
 export const movePartyPokemon = createServerFn({ method: "POST" })
-  .inputValidator((data) =>
+  .validator((data) =>
     z
       .object({ pokemonId: z.string().min(1).max(64), destination: z.enum(["party", "pc"]) })
       .parse(data),
@@ -696,13 +696,13 @@ export const fetchBattleRooms = createServerFn({ method: "GET" }).handler(() => 
 export const openBattleRoom = createServerFn({ method: "POST" }).handler(() => createBattleRoom());
 export const fetchGyms = createServerFn({ method: "GET" }).handler(() => listGyms());
 export const openGymRoom = createServerFn({ method: "POST" })
-  .inputValidator((data) => z.object({ gymId: z.string().min(1).max(40) }).parse(data))
+  .validator((data) => z.object({ gymId: z.string().min(1).max(40) }).parse(data))
   .handler(({ data }) => createGymBattleRoom(data.gymId));
 export const fetchBattleRoom = createServerFn({ method: "GET" })
-  .inputValidator((data) => z.object({ roomId: z.string().min(1).max(64) }).parse(data))
+  .validator((data) => z.object({ roomId: z.string().min(1).max(64) }).parse(data))
   .handler(({ data }) => getBattleRoom(data.roomId));
 export const applyBattleAction = createServerFn({ method: "POST" })
-  .inputValidator((data) =>
+  .validator((data) =>
     z
       .object({
         roomId: z.string().min(1).max(64),
@@ -722,7 +722,7 @@ export const applyBattleAction = createServerFn({ method: "POST" })
   .handler(({ data }) => performBattleAction(data.roomId, data.action));
 
 export const sendModeratorApplication = createServerFn({ method: "POST" })
-  .inputValidator((data) =>
+  .validator((data) =>
     z
       .object({
         name: z.string().trim().min(2).max(60),
@@ -738,7 +738,7 @@ export const sendModeratorApplication = createServerFn({ method: "POST" })
   .handler(({ data }) => submitModeratorApplication(data));
 
 export const sendReqbotRequest = createServerFn({ method: "POST" })
-  .inputValidator((data) =>
+  .validator((data) =>
     z
       .object({
         groupLink: z
