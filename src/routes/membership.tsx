@@ -1,12 +1,11 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { Crown, ShieldCheck, Sparkles } from "@/lib/lucide-icons";
 import { AppShell } from "@/components/aidoru/AppShell";
 
 export const Route = createFileRoute("/membership")({
   head: () => ({
     meta: [
       { title: "Membership — AIDORU" },
-      { name: "description", content: "Compare AIDORU Basic and Premium membership benefits." },
+      { name: "description", content: "AIDORU membership plans: Basic and Premium." },
     ],
   }),
   component: MembershipPage,
@@ -16,7 +15,6 @@ const plans = [
   {
     name: "Basic",
     price: "$1.99",
-    icon: ShieldCheck,
     color: "#62e5d7",
     features: [
       "5% win-rate boost",
@@ -31,7 +29,6 @@ const plans = [
   {
     name: "Premium",
     price: "$5.99",
-    icon: Crown,
     color: "#b993ff",
     features: [
       "$70M deposit benefit",
@@ -45,38 +42,23 @@ const plans = [
   },
 ];
 
+const whatsappContacts = [
+  { number: "+263780894295", href: "https://wa.me/263780894295" },
+  { number: "+27628114340", href: "https://wa.me/27628114340" },
+];
+
 function MembershipPage() {
   return (
-    <AppShell title="Membership" subtitle="Compare trainer benefits and membership tiers.">
+    <AppShell title="AIDORU Membership" hidePageHeading>
       <main className="mx-auto max-w-5xl space-y-6 pb-12">
         <section className="hof-panel p-6 sm:p-8">
-          <div className="flex items-center gap-3">
-            <Sparkles className="size-7 text-cyan-200" />
-            <div>
-              <p className="hof-kicker">Trainer benefits</p>
-              <h1 className="hof-heading text-3xl">AIDORU Membership</h1>
-            </div>
-          </div>
-          <p className="mt-4 max-w-2xl font-bold leading-7 text-slate-300">
-            Membership is managed by the AIDORU owner. Ask the owner to activate a tier with
-            <code className="mx-1 rounded bg-slate-900 px-2 py-1">.activate @user basic</code>
-            or
-            <code className="mx-1 rounded bg-slate-900 px-2 py-1">.activate @user premium</code>
-            in WhatsApp or Discord.
-          </p>
+          <h1 className="hof-heading text-3xl">AIDORU Membership</h1>
         </section>
         <section className="grid gap-4 md:grid-cols-2">
           {plans.map((plan) => {
-            const Icon = plan.icon;
             return (
               <article key={plan.name} className="hof-panel overflow-hidden p-6 sm:p-7">
-                <div className="flex items-start justify-between gap-4">
-                  <div>
-                    <p className="hof-kicker">Trainer plan</p>
-                    <h2 className="hof-heading mt-1 text-3xl">{plan.name}</h2>
-                  </div>
-                  <Icon className="size-8" style={{ color: plan.color }} />
-                </div>
+                <h2 className="hof-heading text-3xl">{plan.name}</h2>
                 <p className="mt-4 font-display text-4xl font-extrabold" style={{ color: plan.color }}>
                   {plan.price}<span className="ml-2 text-base font-bold text-slate-400">/ month</span>
                 </p>
@@ -88,9 +70,19 @@ function MembershipPage() {
                     </li>
                   ))}
                 </ul>
-                <p className="mt-7 rounded-xl border border-white/10 bg-slate-950/50 p-4 text-sm font-bold text-slate-400">
-                  Contact the owner to activate this membership. Payments are not processed on this page.
-                </p>
+                <div className="mt-7 grid gap-3 sm:grid-cols-2">
+                  {whatsappContacts.map((contact) => (
+                    <a
+                      key={contact.number}
+                      href={contact.href}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex min-h-12 items-center justify-center rounded-full border border-cyan-200/25 bg-cyan-200/10 px-4 py-3 text-center text-sm font-extrabold text-cyan-100 transition hover:border-cyan-200/50 hover:bg-cyan-200/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-200"
+                    >
+                      WhatsApp {contact.number}
+                    </a>
+                  ))}
+                </div>
               </article>
             );
           })}
