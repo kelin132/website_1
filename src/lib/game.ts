@@ -257,6 +257,8 @@ export type BattlePokemon = {
   name: string;
   displayName: string;
   level: number;
+  xp?: number;
+  xpNeeded?: number;
   hp: number;
   maxHp: number;
   attack: number;

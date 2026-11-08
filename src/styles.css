@@ -10752,6 +10752,110 @@
   .battle-arena .battle-reaction-button { transition: none; }
 }
 
+/* User-provided battle maps are shared by PvP and gym rooms. */
+.battle-field-map-meadow,
+.battle-field-map-forest,
+.battle-field-map-coast,
+.battle-field-map-volcano,
+.battle-field-map-cave,
+.battle-field-map-snowfield,
+.battle-gym-field {
+  background-color: #173b36;
+  background-image:
+    linear-gradient(180deg, rgba(6, 19, 28, .04) 0%, rgba(5, 20, 22, .08) 58%, rgba(3, 14, 18, .4) 100%),
+    var(--battle-map-bg, url("/battle-maps/meadow-3d.jpg")) !important;
+  background-position: center;
+  background-repeat: no-repeat;
+  background-size: cover;
+}
+.battle-field::before {
+  background:
+    linear-gradient(180deg, rgba(5, 18, 28, .04), transparent 46%, rgba(5, 20, 20, .12)),
+    radial-gradient(ellipse at 50% 40%, rgba(221, 255, 221, .08), transparent 48%);
+  opacity: .5;
+}
+.battle-gym-field::before {
+  z-index: 0;
+  background: linear-gradient(180deg, color-mix(in srgb, var(--gym-accent, #67e8f9) 12%, transparent), transparent 46%);
+  opacity: .42;
+}
+.battle-gym-field::after {
+  top: .7rem;
+  font-size: .48rem;
+  letter-spacing: .16em;
+  opacity: .76;
+}
+
+/* Keep battle copy as compact and readable as the Mart interface. */
+.battle-arena {
+  font-family: var(--font-display, sans-serif);
+}
+.battle-arena-top > div:first-child .font-display { font-size: .92rem; }
+.battle-message-strip {
+  min-height: 2.75rem;
+  font-size: .76rem;
+  line-height: 1.35;
+}
+.battle-arena .battle-hud {
+  padding: .52rem .66rem;
+}
+.battle-hud .font-display { font-size: .86rem; }
+.battle-level-label {
+  flex: none;
+  border: 1px solid rgba(199, 232, 237, .18);
+  border-radius: 999px;
+  background: rgba(4, 15, 23, .68);
+  padding: .2rem .42rem;
+  color: #d4e9ec;
+  font: 750 .53rem/1 var(--font-mono);
+}
+.battle-level-track {
+  height: 3px;
+  margin-top: .34rem;
+  overflow: hidden;
+  border-radius: 999px;
+  background: rgba(2, 11, 18, .75);
+}
+.battle-level-track > span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, #69cfff, #b2f4ff);
+  box-shadow: 0 0 .45rem rgba(105, 207, 255, .28);
+  transition: width .32s ease;
+}
+.battle-arena-lower .battle-log p {
+  font-size: .68rem;
+  font-weight: 750;
+  line-height: 1.45;
+}
+.battle-weather-banner {
+  top: 3.45rem;
+  right: .7rem;
+  display: flex;
+  max-width: 33%;
+  align-items: center;
+  gap: .34rem;
+  padding: .26rem .4rem;
+  border-radius: .58rem;
+  background: rgba(5, 17, 23, .67);
+  backdrop-filter: blur(5px);
+}
+.battle-weather-icon { font-size: .65rem; }
+.battle-weather-banner strong,
+.battle-weather-banner small {
+  font-size: .45rem;
+  line-height: 1.15;
+}
+.battle-weather-banner strong { letter-spacing: .06em; }
+.battle-weather-banner small { margin-top: .08rem; }
+@media (max-width: 640px) {
+  .battle-arena .battle-hud { padding: .45rem .5rem; }
+  .battle-weather-banner { top: 3.05rem; right: .45rem; max-width: 34%; padding: .22rem .32rem; }
+  .battle-weather-banner strong,
+  .battle-weather-banner small { font-size: .4rem; }
+}
+
 /* ---------- Pokémon Journey: focused trainer and collection view ---------- */
 .journey-page {
   width: min(100%, 1120px);

@@ -738,14 +738,20 @@ function BattleArena({
               : "Opponent’s turn";
   const canAct =
     !isSpectator && !mutationPending && room.status === "active" && (myTurn || forcedSwitch);
+  const arenaStyle = {
+    "--battle-map-bg": `url("${battleMapUrl(room.arenaId)}")`,
+    ...(room.gym
+      ? {
+          "--gym-accent": room.gym.accent,
+          "--gym-bg": `url("${battleMapUrl(room.arenaId)}")`,
+        }
+      : {}),
+  } as CSSProperties;
 
   return (
     <section 
       className={`battle-arena hof-panel overflow-hidden ${room.gym ? `battle-gym-theme-${room.gym.theme}` : ""}`} 
-      style={room.gym ? ({ 
-        "--gym-accent": room.gym.accent,
-        "--gym-bg": `url("${room.gym.background}")`
-      } as CSSProperties) : undefined}
+      style={arenaStyle}
     >
       <div className="battle-arena-top flex flex-wrap items-center justify-between gap-3 px-4 py-3 sm:px-6">
         <div className="flex items-center gap-2">
@@ -795,10 +801,7 @@ function BattleArena({
       </div>
       <div
         className={`battle-field ${room.gym ? `battle-gym-field battle-gym-field-${room.gym.theme}` : `battle-field-map-${room.arenaId ?? "meadow"}`} ${room.weather ? `battle-field-weather-${room.weather.id}` : ""} ${transitionId > 0 ? "battle-field-pulse" : ""} ${superEffectiveActive ? "battle-field-super-effective" : ""} ${myTurn ? "battle-field-my-turn" : ""} ${room.status === "finished" ? "battle-field-finished" : ""}`}
-        style={room.gym ? ({
-          "--gym-accent": room.gym.accent,
-          "--gym-bg": `url("${room.gym.background}")`,
-        } as CSSProperties) : undefined}
+        style={arenaStyle}
       >
         {room.weather && (
           <div
@@ -1108,6 +1111,13 @@ function BattlePokemonSprite({
   );
 }
 
+function battleMapUrl(arenaId?: string) {
+  if (arenaId === "forest" || arenaId === "cave") return "/battle-maps/forest-pixel.jpg";
+  if (arenaId === "coast" || arenaId === "snowfield")
+    return "/battle-maps/masters-ex-forest.jpg";
+  return "/battle-maps/meadow-3d.jpg";
+}
+
 function battlePokemonScaleClass(pokemon: BattlePokemon) {
   const id = Number(pokemon.pokedexId);
   const name = `${pokemon.name} ${pokemon.displayName}`.toLowerCase();
@@ -1227,11 +1237,25 @@ function BattleHud({
 }) {
   if (!pokemon) return null;
   const hp = Math.max(0, Math.min(100, pokemon.maxHp ? (pokemon.hp / pokemon.maxHp) * 100 : 0));
+  const xp = Math.max(0, pokemon.xp ?? 0);
+  const xpNeeded = Math.max(1, pokemon.xpNeeded ?? 100);
+  const levelProgress = Math.min(100, Math.round((xp / xpNeeded) * 100));
   return (
     <div className={`battle-hud battle-hud-${side}`}>
       <div className="flex items-center justify-between gap-3">
         <span className="truncate font-display text-lg font-bold">{pokemon.displayName}</span>
-        <span className="font-mono-ui text-[10px] text-slate-300">Lv. {pokemon.level}</span>
+        <span className="battle-level-label">Lv. {pokemon.level}</span>
+      </div>
+      <div
+        className="battle-level-track"
+        role="progressbar"
+        aria-label={`${pokemon.displayName} experience to next level`}
+        aria-valuemin={0}
+        aria-valuemax={xpNeeded}
+        aria-valuenow={Math.min(xp, xpNeeded)}
+        title={`${xp}/${xpNeeded} XP`}
+      >
+        <span style={{ width: `${levelProgress}%` }} />
       </div>
       <div className="mt-2 h-2 overflow-hidden rounded-full bg-black/50">
         <div

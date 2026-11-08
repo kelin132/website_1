@@ -708,6 +708,10 @@ export const applyBattleAction = createServerFn({ method: "POST" })
         roomId: z.string().min(1).max(64),
         action: z.discriminatedUnion("type", [
           z.object({ type: z.literal("ready") }),
+          z.object({
+            type: z.literal("reaction"),
+            emoji: z.enum(["🔥", "👏", "💙", "⚡", "😮", "😂"]),
+          }),
           z.object({ type: z.literal("move"), moveIndex: z.number().int().min(0).max(10) }),
           z.object({ type: z.literal("switch"), pokemonIndex: z.number().int().min(0).max(5) }),
           z.object({

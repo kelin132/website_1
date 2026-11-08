@@ -202,12 +202,18 @@ function publicPokemon(doc: Record<string, unknown>): WebBattlePokemonDoc {
   const id = value(doc["_id"] ?? doc["id"]);
   const pokedexId = numberValue(doc["pokedexId"], 0);
   const imageUrl = value(doc["imageUrl"], "");
+  const level = Math.max(1, numberValue(doc["level"], 1));
   return {
     id,
     pokedexId,
     name: value(doc["name"], "Unknown"),
     displayName: value(doc["displayName"] ?? doc["nickname"] ?? doc["name"], "Unknown"),
-    level: numberValue(doc["level"], 1),
+    level,
+    xp: Math.max(0, numberValue(doc["xp"] ?? doc["exp"], 0)),
+    xpNeeded: Math.max(
+      1,
+      numberValue(doc["xpNeeded"] ?? doc["expNeeded"], Math.floor(100 * Math.pow(level, 1.3))),
+    ),
     hp: Math.max(0, numberValue(doc["hp"], 0)),
     maxHp: Math.max(1, numberValue(doc["maxHp"], 1)),
     attack: Math.max(1, numberValue(doc["attack"], 10)),
