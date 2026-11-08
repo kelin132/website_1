@@ -252,8 +252,8 @@ function ArcadePage() {
           .arcade-hero h1 { margin:18px 0 0; font:900 clamp(42px,7vw,82px)/.9 var(--font-display); letter-spacing:-.065em; text-transform:uppercase; }
           .arcade-hero h1 span { color:#f48b91; }
           .arcade-hero-copy p { max-width:450px; margin:18px 0 0; color:#d0c6b3; font-size:14px; line-height:1.7; }
-          .arcade-hero-image { position:absolute; z-index:-1; inset:0 0 0 auto; width:47%; opacity:.72; mask-image:linear-gradient(90deg,transparent 0%,black 42%); }
-          .arcade-hero-image img { width:100%; height:100%; object-fit:cover; object-position:center 40%; image-rendering:pixelated; }
+          .arcade-hero-image { position:absolute; z-index:-1; inset:0 0 0 auto; width:47%; opacity:.72; border:0; outline:0; border-radius:0; box-shadow:none; background:none; mask-image:linear-gradient(90deg,transparent 0%,black 42%); }
+          .arcade-hero-image img { display:block; width:100%; height:100%; object-fit:cover; object-position:center 40%; image-rendering:pixelated; border:0; outline:0; border-radius:0; box-shadow:none; }
           .arcade-led { display:inline-block; width:7px; height:7px; border-radius:1px; background:#89e3b4; box-shadow:0 0 10px rgba(137,227,180,.45); }
           .arcade-hero-actions { position:absolute; right:18px; top:17px; z-index:2; display:flex; align-items:center; gap:8px; }
           .arcade-wallet,.arcade-sound { display:flex; min-height:38px; align-items:center; gap:9px; border:1px solid rgba(255,255,255,.15); border-radius:5px; background:rgba(13,14,17,.82); padding:8px 12px; backdrop-filter:blur(10px); }
@@ -373,7 +373,7 @@ function ArcadePage() {
         `}</style>
 
         <header className="arcade-hero">
-          <div className="arcade-hero-image" aria-hidden="true"><img src="/arcade/slot-machine.jpg" alt="" /></div>
+          <div className="arcade-hero-image" aria-hidden="true"><img src="/arcade/slots.gif" alt="" /></div>
           <div className="arcade-hero-actions">
             <div className="arcade-wallet" aria-label="Wallet balance">
               <CircleDollarSign className="size-4 text-amber-300" aria-hidden="true" />
