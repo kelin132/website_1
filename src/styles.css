@@ -2123,6 +2123,117 @@
     repeating-linear-gradient(165deg, rgba(52, 211, 153, 0.12) 0 1px, transparent 1px 10px);
   animation: battle-ground-scan 7s linear infinite;
 }
+.battle-field-map-meadow {
+  background:
+    radial-gradient(ellipse at 50% 70%, rgba(105, 190, 113, 0.3), transparent 42%),
+    linear-gradient(180deg, #153d5b 0%, #32758d 44%, #315e3c 45%, #132b24 100%);
+}
+.battle-field-map-forest {
+  background:
+    radial-gradient(ellipse at 50% 65%, rgba(65, 152, 88, 0.32), transparent 38%),
+    linear-gradient(180deg, #0c2934 0%, #1b5146 44%, #234832 45%, #0b1c1b 100%);
+}
+.battle-field-map-coast {
+  background:
+    radial-gradient(ellipse at 50% 68%, rgba(96, 192, 191, 0.32), transparent 42%),
+    linear-gradient(180deg, #244b7d 0%, #3b91a0 45%, #bfa778 46%, #46513a 100%);
+}
+.battle-field-map-volcano {
+  background:
+    radial-gradient(ellipse at 50% 69%, rgba(255, 107, 51, 0.26), transparent 40%),
+    linear-gradient(180deg, #241b2e 0%, #633442 45%, #49302a 46%, #180f17 100%);
+}
+.battle-field-map-cave {
+  background:
+    radial-gradient(ellipse at 50% 64%, rgba(124, 121, 173, 0.22), transparent 40%),
+    linear-gradient(180deg, #151a2d 0%, #34374f 44%, #292a32 45%, #101116 100%);
+}
+.battle-field-map-snowfield {
+  background:
+    radial-gradient(ellipse at 50% 67%, rgba(181, 228, 245, 0.3), transparent 40%),
+    linear-gradient(180deg, #688eaf 0%, #b4d7e5 44%, #edf5f5 45%, #536c7b 100%);
+}
+.battle-field-map-coast::after {
+  background:
+    linear-gradient(180deg, transparent, rgba(2, 9, 13, 0.62)),
+    repeating-linear-gradient(0deg, rgba(174, 216, 202, 0.11) 0 1px, transparent 1px 9px);
+}
+.battle-field-map-volcano::after,
+.battle-field-map-cave::after {
+  background:
+    linear-gradient(180deg, transparent, rgba(2, 9, 13, 0.72)),
+    repeating-linear-gradient(165deg, rgba(239, 113, 77, 0.13) 0 1px, transparent 1px 11px);
+}
+.battle-field-map-snowfield::after {
+  background:
+    linear-gradient(180deg, transparent, rgba(2, 9, 13, 0.58)),
+    repeating-linear-gradient(165deg, rgba(229, 249, 255, 0.2) 0 1px, transparent 1px 12px);
+}
+.battle-weather-banner {
+  position: absolute;
+  z-index: 5;
+  top: 3.7rem;
+  left: 50%;
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  max-width: min(90%, 20rem);
+  padding: 0.45rem 0.8rem;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 999px;
+  background: rgba(7, 16, 27, 0.78);
+  color: #f8fafc;
+  box-shadow: 0 0.5rem 1.5rem rgba(0, 0, 0, 0.24);
+  transform: translateX(-50%);
+  backdrop-filter: blur(10px);
+}
+.battle-weather-icon {
+  font-size: 1.35rem;
+  line-height: 1;
+}
+.battle-weather-banner strong,
+.battle-weather-banner small {
+  display: block;
+  line-height: 1.25;
+}
+.battle-weather-banner strong {
+  font-size: 0.68rem;
+  font-weight: 900;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+.battle-weather-banner small {
+  color: rgba(226, 232, 240, 0.78);
+  font-size: 0.58rem;
+}
+.battle-action-loading {
+  position: absolute;
+  z-index: 8;
+  right: 1rem;
+  bottom: 1rem;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.55rem;
+  padding: 0.55rem 0.8rem;
+  border: 1px solid rgba(103, 232, 249, 0.3);
+  border-radius: 999px;
+  background: rgba(3, 12, 20, 0.86);
+  color: #dffaff;
+  font-size: 0.7rem;
+  font-weight: 900;
+  box-shadow: 0 0.5rem 1.5rem rgba(0, 0, 0, 0.35);
+}
+.battle-loading-ball {
+  width: 1.1rem;
+  height: 1.1rem;
+  border: 2px solid rgba(248, 250, 252, 0.55);
+  border-top-color: #67e8f9;
+  border-radius: 50%;
+  animation: battle-ball-spin 650ms linear infinite;
+}
+@keyframes battle-ball-spin {
+  to { transform: rotate(360deg); }
+}
 .battle-field-pulse {
   animation: battle-field-pulse 0.55s ease-out;
 }

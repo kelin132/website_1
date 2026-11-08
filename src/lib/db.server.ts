@@ -204,6 +204,7 @@ export type WebBattlePokemonDoc = {
   shiny: boolean;
   moves: WebBattleMoveDoc[];
   fainted: boolean;
+  stunnedTurns?: number;
 };
 
 export type WebBattleTrainerDoc = {
@@ -241,6 +242,13 @@ export type WebBattleRoomDoc = {
   invitedOpponentId?: string | null;
   pairKey?: string | null;
   autoStart?: boolean;
+  arenaId?: string;
+  weather?: {
+    id: "clear" | "sun" | "rain" | "sandstorm" | "snow";
+    name: string;
+    icon: string;
+    description: string;
+  };
   spectatorIds: string[];
   reactions?: Array<{ userId: string; emoji: string; createdAt: number }>;
   turn: "challenger" | "opponent" | null;

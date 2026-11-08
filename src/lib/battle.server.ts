@@ -10,17 +10,25 @@ import {
   type WebBattleRoomDoc,
   type WebBattleTrainerDoc,
 } from "./db.server";
-import type { BattleAction, BattleRoom, BattleRoomSummary } from "./game";
+import type { BattleAction, BattleRoom, BattleRoomSummary, BattleWeather } from "./game";
 import { GYM_DEFINITIONS, gymById, gymSpriteUrls, gymBadgeId, gymBadgeIds } from "./gyms";
 
 const ROOM_TTL_MS = 2 * 60 * 1000;
 const INACTIVITY_TTL_MS = 2 * 60 * 1000;
-const GYM_SWITCH_DELAY_MS = 1800;
+const GYM_SWITCH_DELAY_MS = 550;
 
 function pauseBattle(milliseconds: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, milliseconds));
 }
-const FINISHED_TTL_MS = 30_000;
+const FINISHED_TTL_MS = 24 * 60 * 60 * 1000;
+const BATTLE_WEATHER: BattleWeather[] = [
+  { id: "clear", name: "Clear Skies", icon: "☀️", description: "No weather effect." },
+  { id: "sun", name: "Harsh Sunlight", icon: "🌞", description: "Fire moves are stronger; Water moves are weaker." },
+  { id: "rain", name: "Rain", icon: "🌧️", description: "Water moves are stronger; Fire moves are weaker." },
+  { id: "sandstorm", name: "Sandstorm", icon: "🌪️", description: "Rock, Ground, and Steel moves are stronger." },
+  { id: "snow", name: "Snow", icon: "❄️", description: "Ice moves are stronger." },
+];
+const BATTLE_ARENAS = ["meadow", "forest", "coast", "volcano", "cave", "snowfield"] as const;
 const TRAINER_SPRITES = [
   "/battle-trainers/leaf.png",
   "/battle-trainers/red.png",
@@ -309,6 +317,26 @@ function cloneRoom(room: WebBattleRoomDoc): WebBattleRoomDoc {
   };
 }
 
+function randomBattleEnvironment() {
+  return {
+    arenaId: BATTLE_ARENAS[Math.floor(Math.random() * BATTLE_ARENAS.length)],
+    weather: BATTLE_WEATHER[Math.floor(Math.random() * BATTLE_WEATHER.length)],
+  };
+}
+
+function ensureBattleEnvironment(room: WebBattleRoomDoc) {
+  let changed = false;
+  if (!room.arenaId || !BATTLE_ARENAS.includes(room.arenaId as (typeof BATTLE_ARENAS)[number])) {
+    room.arenaId = BATTLE_ARENAS[Math.floor(Math.random() * BATTLE_ARENAS.length)];
+    changed = true;
+  }
+  if (!room.weather || !BATTLE_WEATHER.some((weather) => weather.id === room.weather?.id)) {
+    room.weather = BATTLE_WEATHER[Math.floor(Math.random() * BATTLE_WEATHER.length)];
+    changed = true;
+  }
+  return changed;
+}
+
 function opposite(role: Role): Role {
   return role === "challenger" ? "opponent" : "challenger";
 }
@@ -333,7 +361,7 @@ function roomRole(room: BattleRoomInput, aliases: string[]): Role | "spectator" 
 }
 
 function addLog(room: BattleRoomInput, message: string) {
-  room.combatLog = [...room.combatLog.slice(-11), message];
+  room.combatLog = [...room.combatLog.slice(-99), message];
 }
 
 function effectiveness(moveType: string, defenderTypes: string[]) {
@@ -345,6 +373,7 @@ function calcDamage(
   attacker: WebBattlePokemonDoc,
   defender: WebBattlePokemonDoc,
   move: WebBattleMoveDoc,
+  weather?: BattleWeather,
 ) {
   if (!move.power) return 0;
   const level = attacker.level || 5;
@@ -353,7 +382,17 @@ function calcDamage(
   const roll = 0.85 + Math.random() * 0.15;
   const stab = attacker.types.includes(move.type) ? 1.5 : 1;
   const multiplier = effectiveness(move.type, defender.types);
-  return Math.max(1, Math.floor(base * roll * stab * multiplier));
+  const weatherMultiplier =
+    weather?.id === "sun"
+      ? move.type === "fire" ? 1.5 : move.type === "water" ? 0.5 : 1
+      : weather?.id === "rain"
+        ? move.type === "water" ? 1.5 : move.type === "fire" ? 0.5 : 1
+        : weather?.id === "sandstorm" && ["rock", "ground", "steel"].includes(move.type)
+          ? 1.2
+          : weather?.id === "snow" && move.type === "ice"
+            ? 1.2
+            : 1;
+  return Math.max(1, Math.floor(base * roll * stab * multiplier * weatherMultiplier));
 }
 
 async function clearExpired() {
@@ -409,6 +448,8 @@ function summary(room: WebBattleRoomDoc): BattleRoomSummary {
     spectators: room.spectatorIds.length,
     createdAt: room.createdAt.toISOString(),
     lastActionAt: room.lastActionAt.toISOString(),
+    arenaId: room.arenaId,
+    weather: room.weather,
     gym: room.gym ?? null,
   };
 }
@@ -426,6 +467,8 @@ function serializeRoom(room: WebBattleRoomDoc, joinedAs: BattleRoom["joinedAs"])
     reactions: room.reactions ?? [],
     expiresAt: room.expiresAt?.toISOString() ?? null,
     joinedAs,
+    arenaId: room.arenaId,
+    weather: room.weather,
     gym: room.gym ?? null,
   };
 }
@@ -478,11 +521,12 @@ async function saveRoom(room: WebBattleRoomDoc) {
 }
 
 function scheduleFinishedRoomCleanup(roomId: string) {
-  setTimeout(() => {
+  const cleanup = setTimeout(() => {
     void battleRooms()
       .then((collection) => collection.deleteOne({ _id: roomId, status: "finished" }))
       .catch(() => undefined);
   }, FINISHED_TTL_MS);
+  cleanup.unref?.();
 }
 
 export async function listBattleRooms() {
@@ -610,6 +654,7 @@ export async function createGymBattleRoom(gymId: string) {
   const now = new Date();
   const room: WebBattleRoomDoc = {
     _id: roomId,
+    ...randomBattleEnvironment(),
     code: "",
     status: "active",
     gym: { id: gym.id, name: gym.name, type: gym.type, leader: gym.leader, badge: gym.badge, theme: gym.theme, accent: gym.accent, background: gym.background, music: gym.music, rewardCoins: gym.rewardCoins, rewardXp: gym.rewardXp },
@@ -661,7 +706,7 @@ export async function createGuildWarBattle(warId: string, matchId: string, chall
   const [challenger, opponent] = await Promise.all([loadTrainerSnapshot(challengerId), loadTrainerSnapshot(defenderId)]);
   if (![challenger, opponent].every(trainer => trainer.party.some(pokemon => pokemon.hp > 0))) throw new Error('Both fighters need a healthy Pokémon in their party.');
   const now = new Date();
-  const room: WebBattleRoomDoc = { _id: id, guildWar: { warId, matchId }, code: makeRoomCode(), challenger, opponent, invitedOpponentId: defenderId, status: 'waiting', autoStart: false, spectatorIds: [], turn: null, forcedSwitch: null, round: 0, winnerId: null, combatLog: ['Guild war matchup opened. Both fighters must ready up.'], version: 1, createdAt: now, lastActionAt: now, expiresAt: new Date(now.getTime() + ROOM_TTL_MS) };
+  const room: WebBattleRoomDoc = { _id: id, guildWar: { warId, matchId }, ...randomBattleEnvironment(), code: makeRoomCode(), challenger: { ...challenger, ready: identityMatches(challengerId, aliases) }, opponent: { ...opponent, ready: identityMatches(defenderId, aliases) }, invitedOpponentId: defenderId, status: 'waiting', autoStart: true, spectatorIds: [], turn: null, forcedSwitch: null, round: 0, winnerId: null, combatLog: ['Guild war matchup opened. The match starts when both fighters open the room.'], version: 1, createdAt: now, lastActionAt: now, expiresAt: new Date(now.getTime() + ROOM_TTL_MS) };
   await rooms.replaceOne({ _id: id }, room, { upsert: true });
   return serializeRoom(room, identityMatches(challengerId, aliases) ? 'challenger' : 'opponent');
 }
@@ -695,10 +740,12 @@ export async function createBattleRoom() {
   const now = new Date();
   const room: WebBattleRoomDoc = {
     _id: deterministicRoomId(soloPairKey(jid)),
+    ...randomBattleEnvironment(),
     pairKey: soloPairKey(jid),
+    autoStart: true,
     status: "waiting",
     code: "",
-    challenger,
+    challenger: { ...challenger, ready: true },
     opponent: null,
     spectatorIds: [],
     turn: null,
@@ -731,22 +778,28 @@ export async function getBattleRoom(roomId: string) {
   const user = await requireUser();
   let room = await loadRoomByReference(roomId);
   if (!room) throw new Error("That battle room has expired or does not exist.");
-  if (hydrateGymState(room) || (await ensureGymOpponentTeam(room))) await saveRoom(room);
+  const environmentChanged = ensureBattleEnvironment(room);
+  const gymStateChanged = hydrateGymState(room);
+  const gymTeamChanged = await ensureGymOpponentTeam(room);
+  if (environmentChanged || gymStateChanged || gymTeamChanged) await saveRoom(room);
   const aliases = userIdentityAliases(user as unknown as Record<string, unknown>);
   const battleJid = await resolveBattleJid(user as unknown as Record<string, unknown>);
   const roleAliases = Array.from(new Set([...aliases, ...identityVariants(battleJid)]));
   let role = roomRole(room, roleAliases);
-  if (room.status === "waiting" && room.autoStart && room.opponent && role !== "spectator") {
+  if (room.status === "waiting" && role !== "spectator") {
     const next = cloneRoom(room);
-    const opponent = next.opponent;
-    if (!opponent) throw new Error("The challenged trainer is missing from this room.");
-    next.challenger.ready = true;
-    opponent.ready = true;
-    next.status = "active";
-    next.turn = "challenger";
-    next.round = 1;
-    addLog(next, "Both challenged trainers are loaded. The web battle has started.");
-    await saveRoom(next);
+    const trainer = trainerFor(next, role);
+    if (trainer && !trainer.ready) {
+      trainer.ready = true;
+      await saveRoom(next);
+    }
+    if (next.challenger.ready && next.opponent?.ready) {
+      next.status = "active";
+      next.turn = "challenger";
+      next.round = 1;
+      addLog(next, "Both trainers opened the room. The web battle has started.");
+      await saveRoom(next);
+    }
     room = next;
   }
   if (role === "spectator") {
@@ -756,16 +809,7 @@ export async function getBattleRoom(roomId: string) {
     if (!next.opponent && !isChallenger && invited) {
       next.opponent = await loadTrainerSnapshot(battleJid);
       role = "opponent";
-      if (next.autoStart) {
-        next.challenger.ready = true;
-        next.opponent.ready = true;
-        next.status = "active";
-        next.turn = "challenger";
-        next.round = 1;
-        addLog(next, `${next.opponent.name} joined the room. The web battle has started.`);
-      } else {
-        addLog(next, `${next.opponent.name} joined the room. Both trainers must ready up.`);
-      }
+      addLog(next, `${next.opponent.name} joined the room.`);
     } else {
       if (!next.spectatorIds.includes(battleJid)) next.spectatorIds.push(battleJid);
       role = "spectator";
@@ -777,16 +821,16 @@ export async function getBattleRoom(roomId: string) {
   // before either player opens the link. Start those rooms immediately so
   // the shared URL lands in the live arena instead of a ready/lobby screen.
   if (room.gym && (hydrateGymState(room) || (await ensureGymOpponentTeam(room)))) await saveRoom(room);
-  if (room.opponent && room.autoStart && room.status === "waiting") {
+  if (room.status === "waiting" && role !== "spectator") {
     const next = cloneRoom(room);
-    const opponent = next.opponent;
-    if (!opponent) throw new Error("The challenged trainer is missing from this room.");
-    next.challenger.ready = true;
-    opponent.ready = true;
-    next.status = "active";
-    next.turn = "challenger";
-    next.round = Math.max(1, next.round);
-    addLog(next, "Both trainers are loaded. The arena is live.");
+    const trainer = trainerFor(next, role);
+    if (trainer && !trainer.ready) trainer.ready = true;
+    if (next.challenger.ready && next.opponent?.ready) {
+      next.status = "active";
+      next.turn = "challenger";
+      next.round = Math.max(1, next.round);
+      addLog(next, "Both trainers opened the room. The arena is live.");
+    }
     await saveRoom(next);
     room = next;
   }
@@ -801,7 +845,9 @@ export async function performBattleAction(roomId: string, action: BattleAction) 
   const current = await loadRoomByReference(roomId);
   if (!current) throw new Error("That battle room has expired or does not exist.");
   const room = cloneRoom(current);
-  if (hydrateGymState(room)) await saveRoom(room);
+  const environmentChanged = ensureBattleEnvironment(room);
+  const gymStateChanged = hydrateGymState(room);
+  if (environmentChanged || gymStateChanged) await saveRoom(room);
   const role = roomRole(room, roleAliases);
   if (action.type === "reaction") {
     const allowed = new Set(["🔥", "👏", "💙", "⚡", "😮", "😂"]);
@@ -838,6 +884,16 @@ export async function performBattleAction(roomId: string, action: BattleAction) 
   }
 
   if (room.status !== "active") throw new Error("The battle is not active yet.");
+  if (action.type === "forfeit") {
+    await finishRoom(
+      room,
+      room[opposite(role)]?.id ?? null,
+      `${trainer.name} forfeited the battle.`,
+    );
+    await saveRoom(room);
+    scheduleFinishedRoomCleanup(room._id);
+    return serializeRoom(room, role);
+  }
 
   if (room.gym) {
       if (await ensureGymOpponentTeam(room)) await saveRoom(room);
@@ -857,12 +913,6 @@ export async function performBattleAction(roomId: string, action: BattleAction) 
       await saveRoom(room);
       return serializeRoom(room, role);
     }
-    if (action.type === "forfeit") {
-      await finishRoom(room, gymOpponent.id, `${trainer.name} forfeited the gym challenge.`);
-      await saveRoom(room);
-      scheduleFinishedRoomCleanup(room._id);
-      return serializeRoom(room, role);
-    }
     if (action.type === "switch") {
       const replacement = trainer.party[action.pokemonIndex];
       if (!replacement || replacement.hp <= 0) throw new Error("Choose a healthy Pokémon.");
@@ -877,9 +927,16 @@ export async function performBattleAction(roomId: string, action: BattleAction) 
       if (!attacker || !defender) throw new Error("Both sides need an active Pokémon.");
       const move = attacker.moves[action.moveIndex];
       if (!move) throw new Error("Choose one of the visible moves.");
-      const damage = Math.random() * 100 > (move.accuracy || 100) ? 0 : calcDamage(attacker, defender, move);
-      defender.hp = Math.max(0, defender.hp - damage);
-      addLog(room, `${attacker.displayName} used ${move.name}${damage ? ` for ${damage} damage.` : " It missed."}`);
+      if (Number(attacker.stunnedTurns) > 0) {
+        attacker.stunnedTurns = Math.max(0, Number(attacker.stunnedTurns) - 1);
+        addLog(room, `${attacker.displayName} is stunned and cannot move this turn.`);
+      } else {
+        const damage = Math.random() * 100 > (move.accuracy || 100) ? 0 : calcDamage(attacker, defender, move, room.weather);
+        defender.hp = Math.max(0, defender.hp - damage);
+        const appliesStun = damage > 0 && move.type === "electric" && Math.random() < 0.25 && defender.hp > 0;
+        if (appliesStun) defender.stunnedTurns = 1;
+        addLog(room, `${attacker.displayName} used ${move.name}${damage ? ` for ${damage} damage.` : " It missed."}${appliesStun ? ` ${defender.displayName} was stunned.` : ""}`);
+      }
     }
 
     const defender = activePokemon(room, "opponent");
@@ -912,10 +969,17 @@ export async function performBattleAction(roomId: string, action: BattleAction) 
     const player = activePokemon(room, role);
     const enemy = activePokemon(room, "opponent");
     if (player && enemy && player.hp > 0 && enemy.hp > 0) {
-      const enemyMove = enemy.moves[0];
-      const damage = enemyMove ? calcDamage(enemy, player, enemyMove) : Math.max(1, Math.floor(enemy.attack / 10));
-      player.hp = Math.max(0, player.hp - damage);
-      addLog(room, `${enemy.displayName} counterattacked for ${damage} damage.`);
+      if (Number(enemy.stunnedTurns) > 0) {
+        enemy.stunnedTurns = Math.max(0, Number(enemy.stunnedTurns) - 1);
+        addLog(room, `${enemy.displayName} is stunned and cannot move.`);
+      } else {
+        const enemyMove = enemy.moves[0];
+        const damage = enemyMove ? calcDamage(enemy, player, enemyMove, room.weather) : Math.max(1, Math.floor(enemy.attack / 10));
+        player.hp = Math.max(0, player.hp - damage);
+        const playerStunned = enemyMove?.type === "electric" && enemyMove.power > 0 && Math.random() < 0.25 && player.hp > 0;
+        if (playerStunned) player.stunnedTurns = 1;
+        addLog(room, `${enemy.displayName} counterattacked for ${damage} damage.${playerStunned ? ` ${player.displayName} was stunned.` : ""}`);
+      }
       if (player.hp <= 0) {
         addLog(room, `${player.displayName} fainted.`);
         if (!healthyPokemon(trainer)) {
@@ -960,17 +1024,6 @@ export async function performBattleAction(roomId: string, action: BattleAction) 
     throw new Error("Choose a replacement Pokémon before taking another action.");
   if (room.turn !== role) throw new Error("Wait for your turn.");
 
-  if (action.type === "forfeit") {
-    await finishRoom(
-      room,
-      room[opposite(role)]?.id ?? null,
-      `${trainer.name} forfeited the battle.`,
-    );
-    await saveRoom(room);
-    scheduleFinishedRoomCleanup(room._id);
-    return serializeRoom(room, role);
-  }
-
   if (action.type === "item") {
     throw new Error("Healing items are disabled during battles.");
   }
@@ -981,6 +1034,14 @@ export async function performBattleAction(roomId: string, action: BattleAction) 
   if (!attacker || !defender) throw new Error("Both trainers need an active Pokémon.");
   const move = attacker.moves[action.moveIndex];
   if (!move) throw new Error("Choose one of the visible moves.");
+  if (Number(attacker.stunnedTurns) > 0) {
+    attacker.stunnedTurns = Math.max(0, Number(attacker.stunnedTurns) - 1);
+    addLog(room, `${attacker.displayName} is stunned and cannot move this turn.`);
+    room.turn = opposite(role);
+    room.round += 1;
+    await saveRoom(room);
+    return serializeRoom(room, role);
+  }
   const attackName = `${attacker.displayName} used ${move.name}.`;
   if (Math.random() * 100 > (move.accuracy || 100)) {
     addLog(room, `${attackName} It missed.`);
@@ -991,8 +1052,10 @@ export async function performBattleAction(roomId: string, action: BattleAction) 
   }
 
   const multiplier = effectiveness(move.type, defender.types);
-  const damage = calcDamage(attacker, defender, move);
+  const damage = calcDamage(attacker, defender, move, room.weather);
   defender.hp = Math.max(0, defender.hp - damage);
+  const appliesStun = move.type === "electric" && move.power > 0 && Math.random() < 0.25 && defender.hp > 0;
+  if (appliesStun) defender.stunnedTurns = 1;
   const effectivenessText =
     multiplier === 0
       ? " It had no effect."
@@ -1001,7 +1064,7 @@ export async function performBattleAction(roomId: string, action: BattleAction) 
         : multiplier <= 0.5
           ? " It was not very effective."
           : "";
-  addLog(room, `${attackName} ${damage} damage.${effectivenessText}`);
+  addLog(room, `${attackName} ${damage} damage.${effectivenessText}${appliesStun ? ` ${defender.displayName} was stunned.` : ""}`);
 
   if (defender.hp <= 0) {
     addLog(room, `${defender.displayName} fainted.`);

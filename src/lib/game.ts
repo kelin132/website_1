@@ -269,6 +269,7 @@ export type BattlePokemon = {
   shiny: boolean;
   moves: BattleMove[];
   fainted: boolean;
+  stunnedTurns?: number;
 };
 
 export type BattleTrainer = {
@@ -296,6 +297,13 @@ export type GymRoomMeta = {
   rewardXp: number;
 };
 
+export type BattleWeather = {
+  id: "clear" | "sun" | "rain" | "sandstorm" | "snow";
+  name: string;
+  icon: string;
+  description: string;
+};
+
 export type BattleRoomSummary = {
   id: string;
   code: string;
@@ -305,6 +313,8 @@ export type BattleRoomSummary = {
   spectators: number;
   createdAt: string;
   lastActionAt: string;
+  arenaId?: string;
+  weather?: BattleWeather;
   gym?: GymRoomMeta | null;
 };
 

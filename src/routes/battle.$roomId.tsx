@@ -162,7 +162,11 @@ function BattleRoomBody({ roomId }: { roomId: string }) {
               ))}
             </div>
           )}
-          <BattleSoundscape combatLog={room.combatLog} status={room.status} />
+          <BattleSoundscape
+            combatLog={room.combatLog}
+            status={room.status}
+            pokemon={[...room.challenger.party, ...(room.opponent?.party ?? [])]}
+          />
           <button
             type="button"
             onClick={() =>
@@ -224,20 +228,10 @@ function BattleRoomBody({ roomId }: { roomId: string }) {
       {waitingForReady && (
         <section className="battle-ready-banner hof-panel p-5">
           <p className="hof-kicker">Both parties loaded</p>
-          <h2 className="hof-heading mt-1 text-3xl">Ready when you are.</h2>
+          <h2 className="hof-heading mt-1 text-3xl">Waiting for both trainers.</h2>
           <p className="mt-2 text-sm text-slate-300">
-            The room is shared. Each trainer must press ready before the first lead Pokémon is sent
-            out.
+            The battle starts automatically when both trainers open this room.
           </p>
-          <button
-            type="button"
-            onClick={() => perform({ type: "ready" })}
-            disabled={mutation.isPending || me?.ready}
-            className="hof-button mt-4 inline-flex items-center gap-2"
-          >
-            <Check className="size-4" />
-            {me?.ready ? "Ready" : "Ready up"}
-          </button>
         </section>
       )}
 
@@ -251,6 +245,19 @@ function BattleRoomBody({ roomId }: { roomId: string }) {
         mutationPending={mutation.isPending}
         onAction={perform}
       />
+      {isFinished && (
+        <details className="battle-finished-log hof-panel p-4 sm:p-6" open>
+          <summary className="cursor-pointer font-display text-lg font-bold">Match log</summary>
+          <ol className="mt-4 space-y-2">
+            {room.combatLog.map((entry, index) => (
+              <li key={`${index}-${entry}`} className="font-bold text-slate-100">
+                <span className="mr-2 text-cyan-200">{String(index + 1).padStart(2, "0")}</span>
+                {entry}
+              </li>
+            ))}
+          </ol>
+        </details>
+      )}
       {flash && (
         <p className="rounded-xl border border-rose-300/20 bg-rose-300/10 px-4 py-3 text-sm text-rose-100">
           {flash}
@@ -338,12 +345,15 @@ function WaitingRoomCard({ room }: { room: BattleRoom }) {
 function BattleSoundscape({
   combatLog,
   status,
+  pokemon,
 }: {
   combatLog: string[];
   status: BattleRoom["status"];
+  pokemon: BattleRoom["challenger"]["party"];
 }) {
   const [enabled, setEnabled] = useState(false);
   const audioRef = useRef<AudioContext | null>(null);
+  const cryAudioRef = useRef<HTMLAudioElement | null>(null);
   const previousLength = useRef(combatLog.length);
 
   const context = () => {
@@ -383,6 +393,19 @@ function BattleSoundscape({
     }
     const latest = combatLog[combatLog.length - 1] ?? "";
     if (combatLog.length > previousLength.current) {
+      const lowerLog = latest.toLowerCase();
+      const cryingPokemon = pokemon.find((entry) => {
+        const names = [entry.displayName, entry.name].filter(Boolean).map((name) => name.toLowerCase());
+        return names.some((name) => name.length > 1 && lowerLog.includes(name));
+      });
+      if (cryingPokemon && Number(cryingPokemon.pokedexId) > 0 && /used|fainted|counterattacked|stunned/i.test(latest)) {
+        const cry = cryAudioRef.current ?? new Audio();
+        cryAudioRef.current = cry;
+        cry.src = `https://raw.githubusercontent.com/PokeAPI/cries/main/cries/pokemon/latest/${cryingPokemon.pokedexId}.ogg`;
+        cry.volume = 0.32;
+        cry.currentTime = 0;
+        void cry.play().catch(() => undefined);
+      }
       if (/fainted/i.test(latest)) {
         tone(180, 0.24, "sawtooth", 0.06);
         window.setTimeout(() => tone(110, 0.35, "triangle", 0.045), 100);
@@ -394,7 +417,7 @@ function BattleSoundscape({
       }
       previousLength.current = combatLog.length;
     }
-  }, [combatLog, enabled, status]);
+  }, [combatLog, enabled, pokemon, status]);
 
   useEffect(() => {
     if (!enabled) return;
@@ -724,12 +747,12 @@ function BattleArena({
         </div>
 
       </div>
-      <div className="battle-message-strip" role="status" aria-live="polite">
+      <div className="battle-message-strip font-bold" role="status" aria-live="polite">
         <span className="battle-message-dot" />
         {room.combatLog[room.combatLog.length - 1] ?? "The Pokémon match is ready."}
       </div>
       <div
-        className={`battle-field ${room.gym ? `battle-gym-field battle-gym-field-${room.gym.theme}` : ""} ${transitionId > 0 ? "battle-field-pulse" : ""} ${superEffectiveActive ? "battle-field-super-effective" : ""} ${myTurn ? "battle-field-my-turn" : ""} ${room.status === "finished" ? "battle-field-finished" : ""}`}
+        className={`battle-field ${room.gym ? `battle-gym-field battle-gym-field-${room.gym.theme}` : `battle-field-map-${room.arenaId ?? "meadow"}`} ${transitionId > 0 ? "battle-field-pulse" : ""} ${superEffectiveActive ? "battle-field-super-effective" : ""} ${myTurn ? "battle-field-my-turn" : ""} ${room.status === "finished" ? "battle-field-finished" : ""}`}
         style={room.gym ? ({
           "--gym-accent": room.gym.accent,
           "--gym-bg": `url("${room.gym.background}")`,
@@ -739,6 +762,18 @@ function BattleArena({
           <span>{room.gym ? `${room.gym.name} · ${room.gym.type} arena` : "AIDORU battle field"}</span>
           <span>{room.status === "active" ? `ROUND ${room.round}` : room.status === "finished" ? "RESULT" : "ARENA READY"}</span>
         </div>
+        {room.weather && (
+          <div className={`battle-weather-banner battle-weather-${room.weather.id}`} role="status" aria-label={`Weather: ${room.weather.name}. ${room.weather.description}`}>
+            <span className="battle-weather-icon" aria-hidden="true">{room.weather.icon}</span>
+            <span><strong>{room.weather.name}</strong><small>{room.weather.description}</small></span>
+          </div>
+        )}
+        {mutationPending && (
+          <div className="battle-action-loading" role="status" aria-live="polite">
+            <span className="battle-loading-ball" aria-hidden="true" />
+            Resolving turn
+          </div>
+        )}
         {superEffectiveActive && <SuperEffectiveBurst key={superEffectiveId} />}
         {activeFoe && (
           <BattlePokemonSprite
@@ -794,22 +829,12 @@ function BattleArena({
                 : "Select a move or switch your active Pokémon."}
             </p>
           </div>
-          {!isSpectator && room.status === "active" && (
-            <button
-              type="button"
-              onClick={() => onAction({ type: "forfeit" })}
-              disabled={mutationPending}
-              className="text-xs text-rose-200/75 underline underline-offset-4"
-            >
-              Forfeit
-            </button>
-          )}
         </div>
         {room.status === "waiting" && (
           <div className="battle-spectator-note">
             <Radio className="size-4 text-cyan-200" />
             {room.opponent
-              ? "Both Pokémon parties are loaded. Ready up or wait for the match to start."
+              ? "Both trainers need to open this room. The match then starts automatically."
               : "This Pokémon arena is open. Share the room link with the opposing trainer to load their party."}
           </div>
         )}
@@ -820,21 +845,28 @@ function BattleArena({
               onClick={() => setTab("moves")}
               icon={<Flame className="size-4" />}
             >
-              Moves
+              Fight
             </TabButton>
             <TabButton
               active={tab === "items"}
               onClick={() => setTab("items")}
               icon={<Package className="size-4" />}
             >
-              Items
+              Bag
             </TabButton>
             <TabButton
               active={tab === "switch"}
               onClick={() => setTab("switch")}
               icon={<RotateCcw className="size-4" />}
             >
-              Switch
+              Pokémon
+            </TabButton>
+            <TabButton
+              active={false}
+              onClick={() => onAction({ type: "forfeit" })}
+              icon={<span aria-hidden="true" className="font-black">↗</span>}
+            >
+              Run
             </TabButton>
           </div>
         )}
