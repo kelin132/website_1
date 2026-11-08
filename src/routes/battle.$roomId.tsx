@@ -140,7 +140,12 @@ function BattleRoomBody({ roomId }: { roomId: string }) {
             </p>
           </div>
         </div>
-        <div className="flex flex-wrap gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="battle-spectator-count" aria-label={`${room.spectators} spectators`}>
+            <Eye className="size-3.5" />
+            <strong>{room.spectators}</strong>
+            <span>watching</span>
+          </span>
           <BattleSoundscape combatLog={room.combatLog} status={room.status} />
           <button
             type="button"
@@ -675,17 +680,33 @@ function BattleArena({
             {room.opponent?.name ?? "Waiting"}
           </span>
         </div>
-                  <div className="flex items-center gap-2"><span className="battle-turn-label">{statusText}</span>{room.gym && <span className="rounded-full border border-white/15 bg-black/30 px-3 py-1 text-xs font-bold text-white">{room.gym.badge} · {Number(room.gym.rewardCoins ?? 0).toLocaleString()} coins</span>}</div>
+        <div className="battle-arena-meta">
+          {room.status === "active" && <span className="battle-round-chip">ROUND {room.round}</span>}
+          <span className="battle-turn-label" role="status">{statusText}</span>
+          {room.gym && (
+            <span className="battle-gym-chip" style={{ "--gym-accent": room.gym.accent } as CSSProperties}>
+              <span>{room.gym.type} arena</span>
+              <strong>{room.gym.badge}</strong>
+            </span>
+          )}
+        </div>
 
       </div>
-      <div className="battle-message-strip" role="status">
+      <div className="battle-message-strip" role="status" aria-live="polite">
         <span className="battle-message-dot" />
         {room.combatLog[room.combatLog.length - 1] ?? "The Pokémon match is ready."}
       </div>
       <div
         className={`battle-field ${room.gym ? `battle-gym-field battle-gym-field-${room.gym.theme}` : ""} ${transitionId > 0 ? "battle-field-pulse" : ""} ${superEffectiveActive ? "battle-field-super-effective" : ""} ${myTurn ? "battle-field-my-turn" : ""} ${room.status === "finished" ? "battle-field-finished" : ""}`}
-        style={room.gym ? ({ "--gym-accent": room.gym.accent } as CSSProperties) : undefined}
+        style={room.gym ? ({
+          "--gym-accent": room.gym.accent,
+          "--gym-bg": `url("${room.gym.background}")`,
+        } as CSSProperties) : undefined}
       >
+        <div className="battle-field-caption" aria-hidden="true">
+          <span>{room.gym ? `${room.gym.name} · ${room.gym.type} arena` : "AIDORU battle field"}</span>
+          <span>{room.status === "active" ? `ROUND ${room.round}` : room.status === "finished" ? "RESULT" : "ARENA READY"}</span>
+        </div>
         {superEffectiveActive && <SuperEffectiveBurst key={superEffectiveId} />}
         {activeFoe && (
           <BattlePokemonSprite
@@ -761,7 +782,7 @@ function BattleArena({
           </div>
         )}
         {!isSpectator && room.status === "active" && (
-          <div className="mb-4 flex gap-2 overflow-x-auto">
+          <div className="mb-4 flex gap-2 overflow-x-auto" role="tablist" aria-label="Battle commands">
             <TabButton
               active={tab === "moves"}
               onClick={() => setTab("moves")}
@@ -800,6 +821,7 @@ function BattleArena({
                 type="button"
                 onClick={() => onAction({ type: "move", moveIndex: index })}
                 disabled={!canAct || forcedSwitch}
+                aria-label={`${move.name}, ${move.type} type, power ${move.power || "status"}${move.pp === undefined ? "" : `, ${move.pp} PP`}`}
                 className="battle-move-button"
               >
                 <span className="font-display text-base font-bold">{move.name}</span>
@@ -831,10 +853,13 @@ function BattleArena({
         )}
       </div>
 
-      {room.status === "finished" && winnerName && (
-        <div className="battle-winner-banner">
+      {room.status === "finished" && (
+        <div className="battle-winner-banner" role="status" aria-live="polite">
           <Swords className="size-5" />
-          <strong>{winnerName} has won the battle!</strong>
+          <div>
+            <span>Battle complete</span>
+            <strong>{winnerName ? `${winnerName} has won the battle!` : "The match has ended."}</strong>
+          </div>
           <Swords className="size-5" />
         </div>
       )}
@@ -842,14 +867,14 @@ function BattleArena({
         <div>
           <p className="hof-kicker">Battle log</p>
           <div className="battle-log mt-2">
-            {room.combatLog
+            {room.combatLog.length > 0 ? room.combatLog
               .slice()
               .reverse()
               .map((line, index) => (
                 <p key={`${line}-${index}`} className={index === 0 ? "text-cyan-100" : ""}>
                   {line}
                 </p>
-              ))}
+              )) : <p className="battle-log-empty">Combat events will appear here once the match begins.</p>}
           </div>
         </div>
         <div>
@@ -1076,6 +1101,11 @@ function BattleHud({
         <div
           className={`h-full rounded-full transition-all ${hp < 25 ? "bg-rose-400" : hp < 55 ? "bg-amber-300" : "bg-emerald-300"}`}
           style={{ width: `${hp}%` }}
+            role="progressbar"
+            aria-label={`${pokemon.displayName} HP`}
+            aria-valuemin={0}
+            aria-valuemax={pokemon.maxHp}
+            aria-valuenow={Math.max(0, pokemon.hp)}
         />
       </div>
       <div className="mt-1 flex items-center justify-between font-mono-ui text-[10px] text-slate-300">
@@ -1104,6 +1134,8 @@ function TabButton({
       type="button"
       onClick={onClick}
       className={`battle-tab ${active ? "battle-tab-active" : ""}`}
+      role="tab"
+      aria-selected={active}
     >
       {icon}
       {children}

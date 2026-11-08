@@ -130,7 +130,7 @@ function BattleLobby() {
               <JoinBattleCard />
             </>
           ) : (
-            <WatchRooms rooms={rooms} loading={query.isLoading} error={query.isError} onCopy={copy} copied={copied} />
+            <WatchRooms rooms={rooms} loading={query.isLoading} error={query.isError} onRetry={() => void query.refetch()} onCopy={copy} copied={copied} />
           )}
         </div>
       </section>
@@ -140,7 +140,7 @@ function BattleLobby() {
           <div><p className="hof-kicker">Badge circuit</p><h2 className="battle-panel-title">Challenge a gym</h2><p className="mt-2 text-sm leading-6 text-slate-300">Every gym keeps the same reliable battle controls, but has its own leader, team, theme, badge, and reward.</p></div>
           <span className="hidden rounded-full border border-cyan-300/20 bg-cyan-300/10 px-3 py-1 text-xs text-cyan-100 sm:inline-flex">{gyms.filter((gym) => gym.earned).length}/{gyms.length} badges</span>
         </div>
-        {gymQuery.isLoading ? <div className="battle-empty battle-empty-compact">Loading gyms…</div> : gymQuery.isError ? <div className="battle-inline-error">Start your Pokémon journey in WhatsApp to unlock the Gym Circuit.</div> : <div className="grid gap-3 sm:grid-cols-2">{gyms.map((gym) => <article key={gym.id} className="rounded-2xl border border-white/10 bg-slate-950/55 p-4" style={{ "--gym-accent": gym.accent } as CSSProperties}><div className="flex items-start justify-between gap-3"><div><p className="text-xs uppercase tracking-[0.2em] text-slate-400">{gym.type} gym</p><h3 className="mt-1 font-display text-xl font-bold text-white">{gym.name}</h3><p className="mt-1 text-sm text-slate-300">Leader {gym.leader}</p></div><span className="rounded-full border border-white/10 px-2 py-1 text-xs text-slate-200">{gym.earned ? "Badge earned" : gym.unlocked ? "Unlocked" : "Locked"}</span></div><p className="mt-3 text-sm leading-6 text-slate-400">{gym.description}</p><div className="mt-4 flex items-center justify-between gap-3"><span className="text-xs text-cyan-100">{gym.badge} · {gym.rewardCoins.toLocaleString()} coins</span><button type="button" disabled={!gym.unlocked || gymMutation.isPending} onClick={() => gymMutation.mutate(gym.id)} className="rounded-full px-4 py-2 text-sm font-bold text-slate-950 disabled:cursor-not-allowed disabled:opacity-40" style={{ background: gym.accent }}>{gymMutation.isPending ? "Opening…" : gym.earned ? "Rematch" : "Challenge"}</button></div></article>)}</div>}
+        {gymQuery.isLoading ? <div className="battle-empty battle-empty-compact">Loading gyms…</div> : gymQuery.isError ? <div className="battle-inline-error">Start your Pokémon journey in WhatsApp to unlock the Gym Circuit.</div> : <div className="grid gap-3 sm:grid-cols-2">{gyms.map((gym) => <article key={gym.id} className="battle-gym-card p-4" style={{ "--gym-accent": gym.accent } as CSSProperties}><div className="flex items-start justify-between gap-3"><div><p className="text-xs uppercase tracking-[0.2em] text-slate-400">{gym.type} gym</p><h3 className="mt-1 font-display text-xl font-bold text-white">{gym.name}</h3><p className="mt-1 text-sm text-slate-300">Leader {gym.leader}</p></div><span className="rounded-full border border-white/10 px-2 py-1 text-xs text-slate-200">{gym.earned ? "Badge earned" : gym.unlocked ? "Unlocked" : "Locked"}</span></div><p className="mt-3 text-sm leading-6 text-slate-400">{gym.description}</p><div className="mt-4 flex items-center justify-between gap-3"><span className="text-xs text-cyan-100">{gym.badge} · {gym.rewardCoins.toLocaleString()} coins</span><button type="button" aria-label={`${gym.earned ? "Rematch" : "Challenge"} ${gym.name}`} disabled={!gym.unlocked || gymMutation.isPending} onClick={() => gymMutation.mutate(gym.id)} className="rounded-full px-4 py-2 text-sm font-bold text-slate-950 disabled:cursor-not-allowed disabled:opacity-40" style={{ background: gym.accent }}>{gymMutation.isPending ? "Opening…" : gym.earned ? "Rematch" : "Challenge"}</button></div></article>)}</div>}
         {gymMutation.isError && <p className="mt-3 battle-inline-error">{gymMutation.error instanceof Error ? gymMutation.error.message : "Unable to open the gym arena."}</p>}
       </section>}
 
@@ -185,11 +185,11 @@ function JoinBattleCard() {
   );
 }
 
-function WatchRooms({ rooms, loading, error, onCopy, copied }: { rooms: BattleRoomSummary[]; loading: boolean; error: boolean; onCopy: (value: string, key: string) => void; copied: string | null }) {
+function WatchRooms({ rooms, loading, error, onRetry, onCopy, copied }: { rooms: BattleRoomSummary[]; loading: boolean; error: boolean; onRetry: () => void; onCopy: (value: string, key: string) => void; copied: string | null }) {
   const active = rooms.filter((room) => room.status === "active");
   const waiting = rooms.filter((room) => room.status === "waiting");
   if (loading) return <div className="battle-empty battle-empty-compact"><LoaderCircle className="size-6 animate-spin text-cyan-200" />Scanning live rooms…</div>;
-  if (error) return <div className="battle-empty battle-empty-compact text-rose-100">The spectator feed is offline. Try again in a moment.</div>;
+  if (error) return <div className="battle-empty battle-empty-compact text-rose-100"><span>The spectator feed is offline. Try again in a moment.</span><button type="button" onClick={onRetry} className="battle-secondary-button">Retry feed</button></div>;
   if (rooms.length === 0) return <div className="battle-empty battle-empty-compact"><Eye className="size-6 text-cyan-200" /><span>No rooms are open yet. Create the first match.</span></div>;
   return (
     <div className="battle-watch-list">

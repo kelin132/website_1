@@ -154,12 +154,12 @@ function JourneyBody() {
         </div>}
       </section>
 
-      <section className="hof-panel p-5 sm:p-7">
+      <section className="journey-party-panel hof-panel p-5 sm:p-7">
         <div className="flex flex-wrap items-end justify-between gap-3">
           <div>
             <p className="hof-kicker">Battle formation</p>
             <h2 className="hof-heading mt-1 text-3xl">Active party</h2>
-            <p className="mt-2 text-sm text-muted-foreground">
+            <p className="journey-party-summary mt-2 text-sm text-muted-foreground">
               Tap two slots to swap them, or make a living Pokémon your lead.
             </p>
           </div>
@@ -241,11 +241,13 @@ function PartyCard({
 }) {
   return (
     <article
-      className={`hof-pokemon-card relative overflow-hidden rounded-3xl border p-4 ${lead ? "border-cyan-300/70" : "border-white/10"} ${selected ? "ring-2 ring-amber-300/80" : ""}`}
+      className={`journey-party-card hof-pokemon-card relative overflow-hidden rounded-3xl border p-4 ${lead ? "journey-party-lead border-cyan-300/70" : "border-white/10"} ${selected ? "ring-2 ring-amber-300/80" : ""}`}
     >
       <button
         type="button"
         onClick={onSlot}
+        aria-label={`Select party slot ${slot} — ${pokemon.nickname || pokemon.displayName}`}
+        aria-pressed={selected}
         className="absolute left-3 top-3 z-10 grid size-8 place-items-center rounded-full bg-black/60 font-mono-ui text-xs text-cyan-200"
       >
         {slot}
@@ -258,14 +260,20 @@ function PartyCard({
       <img
         src={pokemon.imageUrl}
         alt={pokemon.displayName}
-        className="mx-auto h-40 w-full object-contain"
+        className="journey-party-art mx-auto h-40 w-full object-contain"
         loading="lazy"
       />
       <div className="text-center">
         <p className="font-display text-xl font-bold">{pokemon.nickname || pokemon.displayName}</p>
-        <p className="mt-1 font-mono-ui text-[10px] text-cyan-200">
-          LV {pokemon.level} · {pokemon.hp}/{pokemon.maxHp} HP
+        <p className="mt-1 font-mono-ui text-[10px] text-cyan-100">
+          LV {pokemon.level} <span aria-hidden="true">·</span> {pokemon.hp}/{pokemon.maxHp} HP
         </p>
+        <div className="journey-party-hp" role="img" aria-label={`${pokemon.displayName} health ${pokemon.hp} of ${pokemon.maxHp}`}>
+          <span style={{ width: `${Math.max(0, Math.min(100, pokemon.maxHp ? (pokemon.hp / pokemon.maxHp) * 100 : 0))}%` }} />
+        </div>
+        <div className="journey-party-types" role="group" aria-label={`${pokemon.displayName} types`}>
+          {pokemon.types.slice(0, 2).map((type) => <span key={type}>{type}</span>)}
+        </div>
       </div>
       <div className="mt-4 grid grid-cols-2 gap-2">
         <button
