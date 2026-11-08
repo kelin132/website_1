@@ -527,8 +527,9 @@ export async function toPublicUser(doc: UserDoc): Promise<PublicUser> {
   const currentBankCard = doc.bankCard === true;
   const currentBankUpgradeLevel = Math.max(0, Math.min(5, Math.floor(Number(doc.bankUpgradeLevel) || 0)));
   const currentLevel = Math.max(1, Number(doc.level) || 1);
-  const levelBankLimit = Math.floor(50_000 * (1 + (currentLevel - 1) * 0.02));
   const purchasedBankLimit = BANK_LIMITS_BY_TIER[currentBankUpgradeLevel] ?? 0;
+  const bankBaseLimit = Math.max(50_000, purchasedBankLimit);
+  const levelBankLimit = bankBaseLimit + currentLevel * 10_000;
   const [guild, trainers] = await Promise.all([
     (await guilds()).findOne({ members: { $in: trainerJids } } as never),
     db.collection("pokemon_trainers").find(collectionOwnershipQuery(trainerJids, [...TRAINER_OWNER_FIELDS])).toArray(),
@@ -588,7 +589,7 @@ export async function toPublicUser(doc: UserDoc): Promise<PublicUser> {
     coins: currentMoney,
     bank: currentBank,
     genesisCrystals: currentGenesisCrystals,
-    bankLimit: Math.max(levelBankLimit, purchasedBankLimit),
+    bankLimit: levelBankLimit,
     bankUpgradeLevel: currentBankUpgradeLevel,
     bankCard: currentBankCard,
     isOwner: isConfiguredOwner(doc),
