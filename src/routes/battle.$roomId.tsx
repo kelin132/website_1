@@ -16,7 +16,10 @@ import {
   Shield,
   Swords,
   UserRound,
+  Volume2,
+  VolumeX,
   Zap,
+  Music2,
 } from "lucide-react";
 import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { AppShell } from "@/components/aidoru/AppShell";
@@ -143,50 +146,15 @@ function BattleRoomBody({ roomId }: { roomId: string }) {
 
   return (
     <div className={`aidoru-page aidoru-page-battle-room space-y-5 pb-12 ${isSpectator ? "battle-spectator-only" : ""}`}>
-      <BattleMusic status={room.status} />
+      <div className="battle-room-audio-dock" role="group" aria-label="Battle audio controls">
+        <BattleSoundscape
+          combatLog={room.combatLog}
+          status={room.status}
+          pokemon={[...room.challenger.party, ...(room.opponent?.party ?? [])]}
+        />
+        <BattleMusic status={room.status} />
+      </div>
       <BattleEndSound status={room.status} winnerId={room.winnerId} playerId={me?.id ?? null} />
-      <BattleSoundscape
-        combatLog={room.combatLog}
-        status={room.status}
-        pokemon={[...room.challenger.party, ...(room.opponent?.party ?? [])]}
-      />
-      {!isSpectator && <section className="battle-room-toolbar hof-panel flex flex-wrap items-center justify-between gap-3 p-4 sm:p-5">
-        <div className="flex items-center gap-3">
-          <span className="battle-live-dot" />
-          <div>
-            <p className="hof-kicker">Room {room.code}</p>
-            <p className="font-display text-lg font-bold">
-              {room.status === "active"
-                ? "Live combat"
-                : room.status === "finished"
-                  ? "Battle complete"
-                  : "Waiting room"}
-            </p>
-          </div>
-        </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <button
-            type="button"
-            onClick={() =>
-              void navigator.clipboard
-                ?.writeText(shareUrl)
-                .then(() => setFlash("Battle link copied."))
-            }
-            className="hof-button-secondary inline-flex items-center gap-2 px-3 py-2 text-xs"
-          >
-            <Copy className="size-3" />
-            Share room
-          </button>
-          <a
-            href="/battle"
-            className="hof-button-secondary inline-flex items-center gap-2 px-3 py-2 text-xs"
-          >
-            <Radio className="size-3" />
-            All rooms
-          </a>
-        </div>
-      </section>
-      }
 
       {!isSpectator && waitingForOpponent && <WaitingRoomCard room={room} />}
       {!isSpectator && waitingForReady && (
@@ -210,6 +178,7 @@ function BattleRoomBody({ roomId }: { roomId: string }) {
         reactionPending={reactionMutation.isPending}
         onAction={perform}
         onReaction={sendReaction}
+        shareUrl={shareUrl}
       />
       {flash && (
         <p className="rounded-xl border border-rose-300/20 bg-rose-300/10 px-4 py-3 text-sm text-rose-100">
@@ -419,11 +388,12 @@ function BattleSoundscape({
     <button
       type="button"
       onClick={() => setEnabled((value) => !value)}
-      className="hof-button-secondary inline-flex items-center gap-2 px-3 py-2 text-xs"
+      className={`battle-audio-button ${enabled ? "battle-audio-button-on" : ""}`}
       aria-pressed={enabled}
+      aria-label={enabled ? "Mute battle effects" : "Enable battle effects"}
+      title={enabled ? "Battle effects on" : "Battle effects off"}
     >
-      <Radio className={`size-3 ${enabled ? "text-cyan-200" : ""}`} />
-      {enabled ? "Sound on" : "Sound"}
+      {enabled ? <Volume2 aria-hidden="true" /> : <VolumeX aria-hidden="true" />}
     </button>
   );
 }
@@ -474,26 +444,30 @@ function BattleMusic({ status }: { status: BattleRoom["status"] }) {
   const [track] = useState(
     () => battleMusicTracks[Math.floor(Math.random() * battleMusicTracks.length)],
   );
-  const [enabled, setEnabled] = useState(false);
+  const [enabled, setEnabled] = useState(true);
+  const [autoplayBlocked, setAutoplayBlocked] = useState(false);
   useEffect(() => {
     const audio = audioRef.current;
     if (!audio) return;
     const active = enabled && status !== "finished";
     audio.volume = 0.22;
     audio.loop = true;
-    audio.preload = "none";
+    audio.preload = active ? "auto" : "none";
     if (!active) {
       audio.pause();
       return;
     }
     const resume = () => {
-      if (audio.paused) void audio.play().catch(() => undefined);
+      if (document.visibilityState === "hidden" || !audio.paused) return;
+      void audio.play()
+        .then(() => setAutoplayBlocked(false))
+        .catch(() => setAutoplayBlocked(true));
     };
     resume();
     window.addEventListener("pointerdown", resume);
     window.addEventListener("touchstart", resume, { passive: true });
     window.addEventListener("keydown", resume);
-    window.addEventListener("visibilitychange", resume);
+    document.addEventListener("visibilitychange", resume);
     window.addEventListener("pageshow", resume);
     audio.addEventListener("ended", resume);
     audio.addEventListener("pause", resume);
@@ -502,7 +476,7 @@ function BattleMusic({ status }: { status: BattleRoom["status"] }) {
       window.removeEventListener("pointerdown", resume);
       window.removeEventListener("touchstart", resume);
       window.removeEventListener("keydown", resume);
-      window.removeEventListener("visibilitychange", resume);
+      document.removeEventListener("visibilitychange", resume);
       window.removeEventListener("pageshow", resume);
       audio.removeEventListener("ended", resume);
       audio.removeEventListener("pause", resume);
@@ -510,18 +484,36 @@ function BattleMusic({ status }: { status: BattleRoom["status"] }) {
       audio.pause();
     };
   }, [enabled, status]);
+  const toggleMusic = () => {
+    if (enabled && !autoplayBlocked) {
+      setEnabled(false);
+      return;
+    }
+    setEnabled(true);
+    setAutoplayBlocked(false);
+    if (status !== "finished" && audioRef.current) {
+      void audioRef.current.play()
+        .then(() => setAutoplayBlocked(false))
+        .catch(() => setAutoplayBlocked(true));
+    }
+  };
   return (
-    <div className="battle-music-control">
-      <audio ref={audioRef} src={`/battle-music/${track}.mp3`} loop preload="none" />
+    <>
+      <audio ref={audioRef} src={`/battle-music/${track}.mp3`} loop preload="auto" />
       <button
         type="button"
-        className="hof-button-secondary inline-flex items-center gap-2 px-3 py-2 text-xs"
-        onClick={() => setEnabled((value) => !value)}
-        aria-pressed={enabled}
+        className={`battle-audio-button ${enabled && !autoplayBlocked ? "battle-audio-button-on" : ""}`}
+        onClick={toggleMusic}
+        aria-pressed={enabled && !autoplayBlocked}
+        aria-label={enabled && !autoplayBlocked ? "Turn battle music off" : "Turn battle music on"}
+        title={enabled && !autoplayBlocked ? "Battle music on" : "Tap to start battle music"}
       >
-        {enabled ? "Music on" : "Music off"}
+        <Music2 aria-hidden="true" />
       </button>
-    </div>
+      {autoplayBlocked && status !== "finished" && (
+        <span className="battle-audio-hint">Tap for music</span>
+      )}
+    </>
   );
 }
 
@@ -567,6 +559,7 @@ function BattleArena({
   reactionPending,
   onAction,
   onReaction,
+  shareUrl,
 }: {
   room: BattleRoom;
   me: BattleTrainer | null;
@@ -578,6 +571,7 @@ function BattleArena({
   reactionPending: boolean;
   onAction: (action: BattleAction) => void;
   onReaction: (emoji: string) => void;
+  shareUrl: string;
 }) {
   const activeMe = me?.party[me.activeIndex] ?? null;
   const activeFoe = foe?.party[foe.activeIndex] ?? null;
@@ -755,6 +749,7 @@ function BattleArena({
     >
       <div className="battle-arena-top flex flex-wrap items-center justify-between gap-3 px-4 py-3 sm:px-6">
         <div className="flex items-center gap-2">
+          {room.status === "active" && <span className="battle-live-pill">LIVE</span>}
           <Swords className="size-4 text-cyan-200" />
           <span className="font-display text-lg font-bold">
             {room.challenger.name} <span className="text-cyan-300">vs</span>{" "}
@@ -793,9 +788,41 @@ function BattleArena({
             ))}
           </div>
         )}
+        <div className="battle-room-action-buttons">
+          <button
+            type="button"
+            onClick={() => {
+              if (navigator.clipboard && shareUrl)
+                void navigator.clipboard.writeText(shareUrl).catch(() => undefined);
+            }}
+            className="battle-room-action-button"
+            aria-label="Share battle room"
+          >
+            <Share2 aria-hidden="true" />
+            <span>Share</span>
+          </button>
+          {isSpectator || room.status !== "active" ? (
+            <a href="/battle" className="battle-room-action-button">
+              <DoorOpen aria-hidden="true" />
+              <span>Leave</span>
+            </a>
+          ) : (
+            <button
+              type="button"
+              onClick={() => onAction({ type: "forfeit" })}
+              disabled={mutationPending}
+              className="battle-room-action-button"
+              aria-label="Leave battle and forfeit"
+            >
+              <DoorOpen aria-hidden="true" />
+              <span>Leave</span>
+            </button>
+          )}
+        </div>
 
       </div>
       <div className="battle-message-strip font-bold" role="status" aria-live="polite">
+        <span className="battle-latest-label">Latest turn · {room.round}</span>
         <span className="battle-message-dot" />
         {room.combatLog[room.combatLog.length - 1] ?? "The Pokémon match is ready."}
       </div>
@@ -1003,8 +1030,12 @@ function BattleArena({
         </div>
       )}
       <div className={`battle-arena-lower ${isSpectator ? "battle-arena-lower-spectator" : ""}`}>
-        <div>
-          <p className="hof-kicker">Battle log</p>
+        <details className="battle-feed-details" open={room.status === "finished" ? true : undefined}>
+          <summary>
+            <strong>Battle feed</strong>
+            <span>Latest first</span>
+            <span className="battle-feed-count">{room.combatLog.length}</span>
+          </summary>
           <div className="battle-log mt-2">
             {room.combatLog.length > 0 ? room.combatLog
               .slice()
@@ -1015,7 +1046,7 @@ function BattleArena({
                 </p>
               )) : <p className="battle-log-empty">Combat events will appear here once the match begins.</p>}
           </div>
-        </div>
+        </details>
         {!isSpectator && <div>
           <p className="hof-kicker">Party status</p>
           <div className="mt-2 grid grid-cols-3 gap-2 sm:grid-cols-6">

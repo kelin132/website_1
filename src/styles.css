@@ -10856,6 +10856,154 @@
   .battle-weather-banner small { font-size: .4rem; }
 }
 
+/* Match the compact mobile battle layout in the supplied recording. */
+.aidoru-page-battle-room {
+  position: relative;
+}
+.battle-room-audio-dock {
+  display: flex;
+  min-height: 2.7rem;
+  align-items: center;
+  justify-content: flex-end;
+  gap: .55rem;
+  padding: .1rem .2rem .35rem;
+}
+.battle-room-audio-dock audio { display: none; }
+.battle-audio-hint {
+  color: #a8bbc1;
+  font: 650 .56rem/1.2 var(--font-display, sans-serif);
+}
+.battle-audio-button {
+  display: grid;
+  width: 2.45rem;
+  height: 2.45rem;
+  place-items: center;
+  border: 1px solid rgba(142, 193, 205, .25);
+  border-radius: 50%;
+  background: #091720;
+  color: #a9bac0;
+  transition: background .15s ease, border-color .15s ease, color .15s ease;
+}
+.battle-audio-button svg { width: 1rem; height: 1rem; }
+.battle-audio-button-on {
+  border-color: rgba(89, 228, 206, .52);
+  background: #10302f;
+  color: #7ef4d4;
+}
+.battle-arena {
+  display: flex;
+  flex-direction: column;
+}
+.battle-field {
+  order: 0;
+  width: 100%;
+  height: auto;
+  min-height: 13rem;
+  max-height: 38rem;
+  aspect-ratio: 16 / 9;
+}
+.battle-arena-top {
+  order: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: .65rem;
+  padding: .8rem;
+}
+.battle-arena-top > div:first-child .font-display { font-size: .9rem; }
+.battle-arena-meta { display: flex; flex-wrap: wrap; align-items: center; gap: .4rem; }
+.battle-live-pill {
+  display: inline-flex;
+  min-height: 1.25rem;
+  align-items: center;
+  border-radius: 999px;
+  background: #45e79b;
+  padding: .15rem .42rem;
+  color: #06271a;
+  font: 950 .54rem/1 var(--font-mono);
+  letter-spacing: .05em;
+}
+.battle-room-action-buttons {
+  display: flex;
+  gap: .55rem;
+}
+.battle-room-action-button {
+  display: inline-flex;
+  min-width: 0;
+  min-height: 2.45rem;
+  flex: 1;
+  align-items: center;
+  justify-content: center;
+  gap: .45rem;
+  border: 1px solid rgba(142, 193, 205, .14);
+  border-radius: .72rem;
+  background: #101c25;
+  color: #e0e9ec;
+  font: 800 .72rem/1 var(--font-display, sans-serif);
+  text-decoration: none;
+}
+.battle-room-action-button svg { width: .9rem; height: .9rem; }
+.battle-room-action-button:hover:not(:disabled) { background: #172831; }
+.battle-message-strip {
+  order: 2;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: .32rem .48rem;
+  padding: .65rem .8rem;
+}
+.battle-latest-label {
+  width: 100%;
+  color: #8da5ad;
+  font: 750 .55rem/1.2 var(--font-mono);
+  letter-spacing: .03em;
+}
+.battle-controls { order: 3; }
+.battle-winner-banner { order: 4; }
+.battle-arena-lower {
+  order: 5;
+  grid-template-columns: minmax(0, 1fr);
+}
+.battle-feed-details {
+  min-width: 0;
+  border-top: 1px solid rgba(142, 193, 205, .12);
+  padding-top: .65rem;
+}
+.battle-feed-details summary {
+  display: flex;
+  min-height: 2.6rem;
+  align-items: center;
+  gap: .6rem;
+  cursor: pointer;
+  list-style: none;
+  color: #edf5f6;
+}
+.battle-feed-details summary::-webkit-details-marker { display: none; }
+.battle-feed-details summary::after {
+  content: "+";
+  margin-left: auto;
+  color: #90a6ad;
+  font-size: 1.15rem;
+}
+.battle-feed-details[open] summary::after { content: "−"; }
+.battle-feed-details summary strong { font-size: .8rem; }
+.battle-feed-details summary > span:not(.battle-feed-count) { color: #93a6ac; font-size: .62rem; }
+.battle-feed-count {
+  display: grid;
+  min-width: 1.35rem;
+  height: 1.35rem;
+  place-items: center;
+  border-radius: 999px;
+  background: rgba(125, 235, 210, .12);
+  color: #9bf1d9;
+  font: 750 .58rem/1 var(--font-mono);
+}
+@media (max-width: 640px) {
+  .battle-field { min-height: 13rem; }
+  .battle-arena-top { padding: .7rem; }
+  .battle-room-action-button { min-height: 2.35rem; }
+}
+
 /* ---------- Pokémon Journey: focused trainer and collection view ---------- */
 .journey-page {
   width: min(100%, 1120px);
