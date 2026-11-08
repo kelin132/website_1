@@ -16,7 +16,6 @@ import { GYM_DEFINITIONS, gymById, gymSpriteUrls, gymBadgeId, gymBadgeIds } from
 const ROOM_TTL_MS = 2 * 60 * 1000;
 const INACTIVITY_TTL_MS = 2 * 60 * 1000;
 const GYM_SWITCH_DELAY_MS = 1800;
-const GYM_PROGRESS_COOLDOWN_MS = 10 * 60 * 60 * 1000;
 
 function pauseBattle(milliseconds: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, milliseconds));
@@ -305,6 +304,7 @@ function cloneRoom(room: WebBattleRoomDoc): WebBattleRoomDoc {
     challenger: cloneTrainer(room.challenger),
     opponent: room.opponent ? cloneTrainer(room.opponent) : null,
     spectatorIds: [...room.spectatorIds],
+    reactions: [...(room.reactions ?? [])],
     combatLog: [...room.combatLog],
   };
 }
@@ -423,6 +423,7 @@ function serializeRoom(room: WebBattleRoomDoc, joinedAs: BattleRoom["joinedAs"])
     challenger: publicTrainer(room.challenger),
     opponent: room.opponent ? publicTrainer(room.opponent) : null,
     combatLog: room.combatLog,
+    reactions: room.reactions ?? [],
     expiresAt: room.expiresAt?.toISOString() ?? null,
     joinedAs,
     gym: room.gym ?? null,
@@ -597,11 +598,6 @@ export async function createGymBattleRoom(gymId: string) {
   const trainerAliases = await resolveUserIdentityKeys(db, { _id: jid });
   const trainerDoc = await db.collection("pokemon_trainers").findOne(collectionOwnershipQuery(trainerAliases, ["jid", "_id", "userId", "ownerJid"]) as never) as Record<string, unknown> | null;
   const badges = new Set(gymBadgeIds(trainerDoc?.["badges"]));
-  const cooldownUntil = trainerDoc?.["gymCooldownUntil"] ? new Date(String(trainerDoc["gymCooldownUntil"])).getTime() : 0;
-  if (Number.isFinite(cooldownUntil) && cooldownUntil > Date.now()) {
-    const remainingHours = Math.ceil((cooldownUntil - Date.now()) / 3600000);
-    throw new Error(`Gym cooldown active. You can challenge the next gym in about ${remainingHours} hour${remainingHours === 1 ? "" : "s"}.`);
-  }
   if (gym.unlockAfter && !badges.has(gym.unlockAfter.toLowerCase())) {
     throw new Error(`Earn the ${gymById(gym.unlockAfter)?.badge ?? "previous badge"} first.`);
   }
@@ -647,7 +643,7 @@ async function grantGymReward(room: WebBattleRoomDoc) {
   const trainerFilter = { $or: aliases.map((jid) => ({ jid })) };
   const claimed = await db.collection("pokemon_trainers").updateOne(
     { ...trainerFilter, [`gymRewards.${room.gym.id}`]: { $ne: true } } as never,
-    { $set: { [`gymRewards.${room.gym.id}`]: true, gymCooldownUntil: new Date(now.getTime() + GYM_PROGRESS_COOLDOWN_MS) }, $addToSet: { badges: gymBadgeId(room.gym.id) }, $inc: { coins: room.gym.rewardCoins, xp: room.gym.rewardXp } } as never,
+    { $set: { [`gymRewards.${room.gym.id}`]: true }, $addToSet: { badges: gymBadgeId(room.gym.id) }, $inc: { coins: room.gym.rewardCoins, xp: room.gym.rewardXp } } as never,
   );
   if (claimed.modifiedCount > 0) {
     await db.collection("users").updateOne({ $or: aliases.flatMap((jid) => [{ _id: jid }, { whatsappNumber: jid }, { jid }]) } as never, { $inc: { money: room.gym.rewardCoins, xp: room.gym.rewardXp } } as never);
@@ -807,6 +803,21 @@ export async function performBattleAction(roomId: string, action: BattleAction) 
   const room = cloneRoom(current);
   if (hydrateGymState(room)) await saveRoom(room);
   const role = roomRole(room, roleAliases);
+  if (action.type === "reaction") {
+    const allowed = new Set(["🔥", "👏", "💙", "⚡", "😮", "😂"]);
+    const emoji = String(action.emoji ?? "");
+    if (!allowed.has(emoji)) throw new Error("Choose a listed battle reaction.");
+    if (room.status !== "active") throw new Error("Reactions are available during a live battle.");
+    const userId = canonicalIdentity(battleJid);
+    const now = Date.now();
+    const recent = (room.reactions ?? []).filter((reaction) => now - reaction.createdAt < 10_000);
+    if (recent.some((reaction) => reaction.userId === userId && now - reaction.createdAt < 1_200)) {
+      throw new Error("Wait a moment before sending another reaction.");
+    }
+    room.reactions = [...recent, { userId, emoji, createdAt: now }].slice(-24);
+    await saveRoom(room);
+    return serializeRoom(room, role);
+  }
   if (role === "spectator")
     throw new Error("Spectators can watch this room but cannot control a trainer.");
   const trainer = trainerFor(room, role);

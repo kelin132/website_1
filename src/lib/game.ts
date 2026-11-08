@@ -311,6 +311,7 @@ export type BattleRoom = BattleRoomSummary & {
   challenger: BattleTrainer;
   opponent: BattleTrainer | null;
   combatLog: string[];
+  reactions?: BattleReaction[];
   expiresAt: string | null;
   joinedAs: "challenger" | "opponent" | "spectator" | null;
   gym?: GymRoomMeta | null;
@@ -318,10 +319,17 @@ export type BattleRoom = BattleRoomSummary & {
 
 export type BattleAction =
   | { type: "ready" }
+  | { type: "reaction"; emoji: string }
   | { type: "move"; moveIndex: number }
   | { type: "switch"; pokemonIndex: number }
   | { type: "item"; item: "potion" | "superpotion" | "hyperpotion" | "revive" | "fullrestore" }
   | { type: "forfeit" };
+
+export type BattleReaction = {
+  userId: string;
+  emoji: string;
+  createdAt: number;
+};
 
 export type PublicUser = {
   id: string;

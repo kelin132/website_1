@@ -241,6 +241,7 @@ export type WebBattleRoomDoc = {
   pairKey?: string | null;
   autoStart?: boolean;
   spectatorIds: string[];
+  reactions?: Array<{ userId: string; emoji: string; createdAt: number }>;
   turn: "challenger" | "opponent" | null;
   forcedSwitch: "challenger" | "opponent" | null;
   round: number;

@@ -146,6 +146,22 @@ function BattleRoomBody({ roomId }: { roomId: string }) {
             <strong>{room.spectators}</strong>
             <span>watching</span>
           </span>
+          {room.status === "active" && (
+            <div className="flex items-center gap-1.5" aria-label="Send a battle reaction">
+              {["🔥", "👏", "💙", "⚡", "😮", "😂"].map((emoji) => (
+                <button
+                  key={emoji}
+                  type="button"
+                  aria-label={`React ${emoji}`}
+                  disabled={mutation.isPending}
+                  onClick={() => perform({ type: "reaction", emoji })}
+                  className="rounded-full border border-white/10 bg-white/5 px-2 py-1 text-lg leading-none transition hover:scale-110 hover:bg-white/10 disabled:opacity-50"
+                >
+                  {emoji}
+                </button>
+              ))}
+            </div>
+          )}
           <BattleSoundscape combatLog={room.combatLog} status={room.status} />
           <button
             type="button"
@@ -167,6 +183,22 @@ function BattleRoomBody({ roomId }: { roomId: string }) {
             All rooms
           </a>
         </div>
+        {room.status === "active" && room.reactions?.length > 0 && (
+          <div className="mt-2 flex min-h-9 flex-wrap items-center gap-2" aria-live="polite" aria-label="Recent battle reactions">
+            {room.reactions
+              .filter((reaction) => Date.now() - reaction.createdAt < 9_000)
+              .slice(-8)
+              .map((reaction, index) => (
+                <span
+                  key={`${reaction.createdAt}-${index}`}
+                  className="animate-bounce rounded-full border border-white/10 bg-slate-950/70 px-3 py-1 text-2xl shadow-lg"
+                  aria-label="Battle reaction"
+                >
+                  {reaction.emoji}
+                </span>
+              ))}
+          </div>
+        )}
       </section>
 
       {waitingForOpponent && <WaitingRoomCard room={room} />}
