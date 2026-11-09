@@ -54,6 +54,7 @@ export { default as LockKeyhole } from "lucide-react/dist/esm/icons/lock-keyhole
 export { default as LogOut } from "lucide-react/dist/esm/icons/log-out.js";
 export { default as Menu } from "lucide-react/dist/esm/icons/menu.js";
 export { default as MessageCircle } from "lucide-react/dist/esm/icons/message-circle.js";
+export { default as Music2 } from "lucide-react/dist/esm/icons/music-2.js";
 export { default as Minus } from "lucide-react/dist/esm/icons/minus.js";
 export { default as MoreHorizontal } from "lucide-react/dist/esm/icons/ellipsis.js";
 export { default as Package } from "lucide-react/dist/esm/icons/package.js";
@@ -85,5 +86,7 @@ export { default as UserRound } from "lucide-react/dist/esm/icons/user-round.js"
 export { default as UserRoundPlus } from "lucide-react/dist/esm/icons/user-round-plus.js";
 export { default as Users } from "lucide-react/dist/esm/icons/users.js";
 export { default as WalletCards } from "lucide-react/dist/esm/icons/wallet-cards.js";
+export { default as Volume2 } from "lucide-react/dist/esm/icons/volume-2.js";
+export { default as VolumeX } from "lucide-react/dist/esm/icons/volume-x.js";
 export { default as X } from "lucide-react/dist/esm/icons/x.js";
 export { default as Zap } from "lucide-react/dist/esm/icons/zap.js";

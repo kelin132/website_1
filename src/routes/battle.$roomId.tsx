@@ -9,6 +9,7 @@ import {
   Flame,
   Heart,
   LoaderCircle,
+  Music2,
   Package,
   Radio,
   RotateCcw,
@@ -19,8 +20,7 @@ import {
   Volume2,
   VolumeX,
   Zap,
-  Music2,
-} from "lucide-react";
+} from "@/lib/lucide-icons";
 import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { AppShell } from "@/components/aidoru/AppShell";
 import { applyBattleAction, fetchBattleRoom } from "@/lib/aidoru.functions";
