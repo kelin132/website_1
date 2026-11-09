@@ -20,9 +20,10 @@
 .aidoru-avatar-frame {
   position: absolute;
   z-index: 2;
-  inset: -20%;
-  width: 140%;
-  height: 140%;
+  /* Match the WhatsApp renderer: frame artwork is 1.5× the avatar diameter. */
+  inset: -25%;
+  width: 150%;
+  height: 150%;
   overflow: visible;
   pointer-events: none;
   filter: drop-shadow(0 0.2rem 0.35rem rgba(15, 23, 42, .42));
