@@ -40,6 +40,10 @@ import {
   type ShopItem,
 } from "@/lib/game";
 import { PROFILE_FRAME_CATALOG, PROFILE_FRAMES, normalizeProfileFrame } from "@/lib/profileFrames";
+import {
+  PROFILE_FONT_OPTIONS,
+  type ProfileFont,
+} from "@/lib/profileStyle";
 
 export const Route = createFileRoute("/profile")({
   head: () => ({
@@ -157,16 +161,23 @@ function ProfileBody() {
   const [background, setBackground] = useState(user?.profileBackground ?? "");
   const [avatarImage, setAvatarImage] = useState(user?.avatarUrl ?? "");
   const [avatarVideo, setAvatarVideo] = useState(user?.avatarVideoUrl ?? "");
+  const [backgroundVideo, setBackgroundVideo] = useState(user?.profileBackgroundVideoUrl ?? "");
   const [profileFrame, setProfileFrame] = useState(user?.profileFrame ?? "none");
   const [frameDraft, setFrameDraft] = useState(user?.profileFrame ?? "none");
+  const [profileFont, setProfileFont] = useState<ProfileFont>((user?.profileFont as ProfileFont) ?? "georgia");
+  const [profileColor, setProfileColor] = useState(user?.profileColor ?? "#ead8ff");
+  const [fontDraft, setFontDraft] = useState<ProfileFont>((user?.profileFont as ProfileFont) ?? "georgia");
+  const [colorDraft, setColorDraft] = useState(user?.profileColor ?? "#ead8ff");
   const [framePickerOpen, setFramePickerOpen] = useState(false);
   const [profileEditorOpen, setProfileEditorOpen] = useState(false);
   const [profileTab, setProfileTab] = useState<"overview" | "deck" | "inventory" | "pokemon">("overview");
   const [nameDraft, setNameDraft] = useState(user?.name ?? "");
   const [bioDraft, setBioDraft] = useState(user?.bio ?? "");
   const [framePage, setFramePage] = useState(0);
-  const [uploading, setUploading] = useState<"avatar" | "background" | "video" | null>(null);
-  const canUploadMovingProfile = Boolean(user?.isOwner || Number(user?.staffLevel ?? 0) >= 2);
+  const [uploading, setUploading] = useState<"avatar" | "background" | null>(null);
+  const canUploadMovingProfile = Boolean(user?.isOwner || Number(user?.staffLevel ?? 0) >= 1);
+  const hasActiveMembership = user?.membershipTier === "basic" || user?.membershipTier === "premium";
+  const hasPremiumMembership = user?.membershipTier === "premium";
   const avatarInputRef = useRef<HTMLInputElement>(null);
   const backgroundInputRef = useRef<HTMLInputElement>(null);
   const videoInputRef = useRef<HTMLInputElement>(null);
@@ -176,11 +187,16 @@ function ProfileBody() {
     setBackground(user.profileBackground ?? "");
     setAvatarImage(user.avatarUrl ?? "");
     setAvatarVideo(user.avatarVideoUrl ?? "");
+    setBackgroundVideo(user.profileBackgroundVideoUrl ?? "");
     setProfileFrame(normalizeProfileFrame(user.profileFrame));
     setFrameDraft(normalizeProfileFrame(user.profileFrame));
+    setProfileFont((user.profileFont as ProfileFont) ?? "georgia");
+    setProfileColor(user.profileColor ?? "#ead8ff");
+    setFontDraft((user.profileFont as ProfileFont) ?? "georgia");
+    setColorDraft(user.profileColor ?? "#ead8ff");
     setNameDraft(user.name ?? "");
     setBioDraft(user.bio ?? "");
-  }, [user?.id, user?.profileBackground, user?.profileFrame, user?.avatarUrl, user?.avatarVideoUrl]);
+  }, [user?.id, user?.profileBackground, user?.profileBackgroundVideoUrl, user?.profileFrame, user?.avatarUrl, user?.avatarVideoUrl, user?.profileFont, user?.profileColor]);
 
   type ProfileMedia = {
     name?: string;
@@ -188,7 +204,10 @@ function ProfileBody() {
     avatarImage?: string;
     avatarVideo?: string;
     background?: string;
+    backgroundVideo?: string;
     profileFrame?: string;
+    profileFont?: string;
+    profileColor?: string;
   };
   const saveMutation = useMutation({
     mutationFn: (media: ProfileMedia = {}) =>
@@ -199,11 +218,18 @@ function ProfileBody() {
           ...(media.avatarImage !== undefined ? { avatarImage: media.avatarImage } : {}),
           ...(media.avatarVideo !== undefined ? { avatarVideo: media.avatarVideo } : {}),
           ...(media.background !== undefined ? { background: media.background } : {}),
+          ...(media.backgroundVideo !== undefined ? { backgroundVideo: media.backgroundVideo } : {}),
           ...(media.profileFrame !== undefined ? { profileFrame: media.profileFrame } : {}),
+          ...(media.profileFont !== undefined ? { profileFont: media.profileFont } : {}),
+          ...(media.profileColor !== undefined ? { profileColor: media.profileColor } : {}),
         },
       }),
     onSuccess: (next) => {
       writeSession(next);
+      setAvatarVideo(next.avatarVideoUrl ?? "");
+      setBackgroundVideo(next.profileBackgroundVideoUrl ?? "");
+      setProfileFont((next.profileFont as ProfileFont) ?? "georgia");
+      setProfileColor(next.profileColor ?? "#ead8ff");
       toast.success("Profile appearance synced successfully.");
     },
     onError: (error: Error) => toast.error(error.message),
@@ -223,9 +249,9 @@ function ProfileBody() {
     return null;
   };
 
-  const uploadProfileAnimation = async (file: File) => {
+  const uploadProfileAnimation = async (file: File, target: "avatar" | "background") => {
     if (!canUploadMovingProfile) {
-      toast.error("Only the owner or staff level 2 and above can upload a moving profile picture.");
+      toast.error("Only the owner or a moderator can upload moving profile media.");
       return;
     }
     if (file.size > 10 * 1024 * 1024) {
@@ -238,7 +264,7 @@ function ProfileBody() {
       return;
     }
 
-    setUploading("video");
+    setUploading(target);
     try {
       const dataUrl = await new Promise<string>((resolve, reject) => {
         const reader = new FileReader();
@@ -247,10 +273,11 @@ function ProfileBody() {
         reader.readAsDataURL(file);
       });
       const videoBase64 = dataUrl.split(",", 2)[1] ?? "";
-      const next = await uploadVideo({ data: { videoBase64, contentType } });
+      const next = await uploadVideo({ data: { videoBase64, contentType, target } });
       writeSession(next);
       setAvatarVideo(next.avatarVideoUrl ?? "");
-      toast.success("Animation saved and synced to your WhatsApp profile card.");
+      setBackgroundVideo(next.profileBackgroundVideoUrl ?? "");
+      toast.success(`${target === "avatar" ? "Profile animation" : "Background animation"} synced to your WhatsApp profile card.`);
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "That video could not be uploaded.");
     } finally {
@@ -262,8 +289,8 @@ function ProfileBody() {
     const file = event.target.files?.[0];
     event.target.value = "";
     if (!file) return;
-    if (type === "avatar" && isAnimationFile(file)) {
-      await uploadProfileAnimation(file);
+    if (isAnimationFile(file)) {
+      await uploadProfileAnimation(file, type);
       return;
     }
     setUploading(type);
@@ -273,11 +300,14 @@ function ProfileBody() {
         setAvatarImage(image);
         if (canUploadMovingProfile) setAvatarVideo("");
       }
-      else setBackground(image);
+      else {
+        setBackground(image);
+        if (canUploadMovingProfile) setBackgroundVideo("");
+      }
       saveMutation.mutate(
         type === "avatar"
           ? { avatarImage: image, ...(canUploadMovingProfile ? { avatarVideo: "" } : {}) }
-          : { background: image },
+          : { background: image, ...(canUploadMovingProfile ? { backgroundVideo: "" } : {}) },
       );
       toast.success(`${type === "avatar" ? "Profile image" : "Profile background"} saved.`);
     } catch (error) {
@@ -292,7 +322,7 @@ function ProfileBody() {
     const file = event.target.files?.[0];
     event.target.value = "";
     if (!file) return;
-    await uploadProfileAnimation(file);
+    await uploadProfileAnimation(file, "avatar");
   };
 
   const openFramePicker = () => {
@@ -316,6 +346,10 @@ function ProfileBody() {
         onError: () => setProfileFrame(previousFrame),
       },
     );
+  };
+
+  const saveProfileStyle = () => {
+    saveMutation.mutate({ profileFont: fontDraft, profileColor: colorDraft });
   };
 
   const openProfileEditor = () => {
@@ -392,8 +426,11 @@ function ProfileBody() {
   const itemMap = new Map((itemsQuery.data ?? []).map((item) => [item.id, item]));
   const bag = user.trainerInventory.length > 0 ? user.trainerInventory : user.inventory;
   const totalBagItems = bag.reduce((sum, entry) => sum + entry.qty, 0);
+  const profileFontFamily = PROFILE_FONT_OPTIONS.find((font) => font.id === profileFont)?.label ?? "Georgia";
   const profileStyle = {
     "--profile-background": background ? `url(${background})` : "none",
+    "--profile-font-family": profileFontFamily,
+    "--profile-text-color": profileColor,
   } as CSSProperties;
   const framePageSize = 4;
   const framePageCount = Math.ceil(PROFILE_FRAMES.length / framePageSize);
@@ -496,6 +533,19 @@ function ProfileBody() {
         </div>
       )}
       <section className="profile-card profile-hero" style={profileStyle}>
+        {backgroundVideo && (
+          /[?&]format=gif(?:&|$)/i.test(backgroundVideo)
+            ? <img className="profile-hero-background-image" src={backgroundVideo} alt="" aria-hidden="true" />
+            : <video
+                className="profile-hero-background-video"
+                src={backgroundVideo}
+                autoPlay
+                loop
+                muted
+                playsInline
+                aria-hidden="true"
+              />
+        )}
         <button type="button" onClick={() => backgroundInputRef.current?.click()} disabled={Boolean(uploading) || saveMutation.isPending} className="profile-cover-edit" aria-label="Edit profile background">
           <span className="profile-edit-emoji" aria-hidden="true">✏️</span>
         </button>
@@ -517,15 +567,16 @@ function ProfileBody() {
           <div className="profile-hero-copy">
             <p className="profile-eyebrow">AIDORU TRAINER PROFILE</p>
             <div className="profile-hero-name-line">
-              <h2 className="profile-name">{user.name}</h2>
+              <h2 className="profile-name" style={{ color: profileColor, fontFamily: profileFontFamily }}>{user.name}</h2>
               <button type="button" className="profile-inline-edit" aria-label="Edit name and bio" onClick={openProfileEditor}>✏️</button>
             </div>
-            <p className="profile-bio">{user.bio || "Your profile is synced from your live trainer data."}</p>
+            <p className="profile-bio" style={{ color: profileColor, fontFamily: profileFontFamily }}>{user.bio || "Your profile is synced from your live trainer data."}</p>
             <div className="profile-chip-row">
               <span className="profile-chip profile-chip-primary">
                 {user.id.startsWith("discord:") ? "DISCORD ACCOUNT" : "WHATSAPP LINKED"}
               </span>
               <span className="profile-chip">{user.title}</span>
+              {user.membershipTier !== "none" && <span className="profile-chip profile-chip-primary">{user.membershipTier.toUpperCase()} MEMBER</span>}
               {user.guildName && <span className="profile-chip">{user.guildName}</span>}
             </div>
             {canUploadMovingProfile && (
@@ -535,14 +586,25 @@ function ProfileBody() {
                 disabled={Boolean(uploading) || saveMutation.isPending}
                 className="mt-4 inline-flex items-center rounded-full border border-cyan-300/40 bg-slate-950/70 px-4 py-2 text-xs font-semibold text-cyan-100 transition hover:bg-cyan-950/70 disabled:opacity-60"
               >
-                {uploading === "video" ? "Uploading video…" : avatarVideo ? "Replace moving avatar" : "Upload moving avatar"}
+                {uploading === "avatar" ? "Uploading…" : avatarVideo ? "Replace moving avatar" : "Upload moving avatar"}
                 <span className="ml-2 text-cyan-200/70">GIF or MP4 · max 10 MB</span>
+              </button>
+            )}
+            {canUploadMovingProfile && (
+              <button
+                type="button"
+                onClick={() => backgroundInputRef.current?.click()}
+                disabled={Boolean(uploading) || saveMutation.isPending}
+                className="mt-2 inline-flex items-center rounded-full border border-indigo-300/40 bg-slate-950/70 px-4 py-2 text-xs font-semibold text-indigo-100 transition hover:bg-indigo-950/70 disabled:opacity-60"
+              >
+                {uploading === "background" ? "Uploading…" : backgroundVideo ? "Replace moving background" : "Upload moving background"}
+                <span className="ml-2 text-indigo-200/70">GIF or MP4 · max 10 MB</span>
               </button>
             )}
           </div>
         </div>
         <input ref={avatarInputRef} type="file" accept="image/*,video/*,.gif,.mp4" onChange={(event) => handleImageChange(event, "avatar")} className="hidden" disabled={Boolean(uploading) || saveMutation.isPending} />
-        <input ref={backgroundInputRef} type="file" accept="image/*" onChange={(event) => handleImageChange(event, "background")} className="hidden" disabled={Boolean(uploading) || saveMutation.isPending} />
+        <input ref={backgroundInputRef} type="file" accept="image/*,video/*,.gif,.mp4" onChange={(event) => handleImageChange(event, "background")} className="hidden" disabled={Boolean(uploading) || saveMutation.isPending} />
         <input ref={videoInputRef} type="file" accept="image/*,video/*,.gif,.mp4" onChange={handleVideoChange} className="hidden" disabled={Boolean(uploading) || saveMutation.isPending} />
       </section>
 
@@ -568,7 +630,12 @@ function ProfileBody() {
 
       <section className="profile-metrics-grid" aria-label="Trainer statistics">
         <ProfileMetric icon={Coins} label="Wallet" value={formatCoins(user.coins)} detail="Wallet balance" />
-        <ProfileMetric icon={Landmark} label="Bank" value={formatCoins(user.bank)} detail="Bank balance" />
+        <ProfileMetric
+          icon={Landmark}
+          label="Bank"
+          value={formatCoins(user.bank)}
+          detail={`Capacity: ${user.membershipTier === "premium" ? "Unlimited" : formatCoins(user.bankLimit)}`}
+        />
         <ProfileMetric icon={Gauge} label="Level" value={String(progress.level)} detail={`${new Intl.NumberFormat("en-US").format(progress.current)} / ${new Intl.NumberFormat("en-US").format(progress.needed)} XP`} />
         <ProfileMetric icon={Trophy} label="XP" value={user.trainerXp.toLocaleString()} detail={`${rankFromLevel(progress.level)} · ${user.streak} day streak`} />
         <ProfileMetric wide icon={GalleryHorizontalEnd} label="Cards" value={cardCountQuery.data?.toLocaleString() ?? (cardCountQuery.isError ? "—" : "…")} detail={cardCountQuery.isLoading ? "Loading collection" : "Collected cards"} />
@@ -599,10 +666,55 @@ function ProfileBody() {
             <strong>{PROFILE_FRAME_CATALOG.find((frame) => frame.id === profileFrame)?.label ?? "Clean"}</strong>
             <p>{PROFILE_FRAME_CATALOG.find((frame) => frame.id === profileFrame)?.description ?? "No frame"}</p>
           </div>
-          <button type="button" className="profile-frame-open" onClick={openFramePicker} disabled={Boolean(uploading) || saveMutation.isPending}>
-            Browse frames
+          <button type="button" className="profile-frame-open" onClick={openFramePicker} disabled={!hasPremiumMembership || Boolean(uploading) || saveMutation.isPending}>
+            {hasPremiumMembership ? "Browse frames" : "Premium frames"}
           </button>
         </div>
+        {!hasPremiumMembership && <a className="mt-4 inline-block text-sm text-cyan-200 underline" href="/membership">View Premium membership</a>}
+      </section>
+
+      <section className="profile-editor hof-panel p-5 sm:p-6">
+        <div className="flex flex-wrap items-end justify-between gap-3">
+          <div>
+            <p className="hof-kicker">Member profile style</p>
+            <h2 className="hof-heading mt-1 text-3xl">Set your font and color</h2>
+            <p className="mt-2 max-w-2xl text-sm text-muted-foreground">
+              Your saved style appears on the website and your WhatsApp profile card.
+            </p>
+          </div>
+          {hasActiveMembership && <span className="profile-frame-status">{user.membershipTier.toUpperCase()} MEMBER</span>}
+        </div>
+        {hasActiveMembership ? (
+          <div className="mt-5 flex flex-wrap items-end gap-4">
+            <label className="grid gap-2 text-sm font-semibold">
+              Profile font
+              <select
+                className="min-w-48 rounded-xl border border-white/15 bg-slate-950 px-3 py-2"
+                value={fontDraft}
+                onChange={(event) => setFontDraft(event.target.value as ProfileFont)}
+              >
+                {PROFILE_FONT_OPTIONS.map((font) => <option key={font.id} value={font.id}>{font.label}</option>)}
+              </select>
+            </label>
+            <label className="grid gap-2 text-sm font-semibold">
+              Profile color
+              <input
+                className="h-11 w-20 cursor-pointer rounded-xl border border-white/15 bg-slate-950 p-1"
+                type="color"
+                value={colorDraft}
+                onChange={(event) => setColorDraft(event.target.value)}
+              />
+            </label>
+            <button type="button" className="profile-frame-open" onClick={saveProfileStyle} disabled={saveMutation.isPending}>
+              {saveMutation.isPending ? "Saving…" : "Save style"}
+            </button>
+          </div>
+        ) : (
+          <div className="mt-5 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-white/10 bg-slate-950/60 p-4">
+            <p className="text-sm text-muted-foreground">Custom fonts and colors are available with an active membership.</p>
+            <a className="profile-frame-open" href="/membership">View membership</a>
+          </div>
+        )}
       </section>
 
       <section className="hof-panel flex flex-wrap items-center justify-between gap-5 p-5 sm:p-6">

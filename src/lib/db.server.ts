@@ -41,8 +41,14 @@ export type UserDoc = {
   profilePictureUrl?: string | null;
   profilePictureUpdatedAt?: string | Date | null;
   profileBackground?: string | null;
+  profileBackgroundVideo?: string | null;
   profileFrame?: string | null;
   avatarVideo?: string | null;
+  profileFont?: string | null;
+  profileColor?: string | null;
+  membershipTier?: "none" | "basic" | "premium" | string;
+  membershipCashGranted?: number;
+  membershipCrystalsGranted?: number;
   age?: number | null;
   birthday?: string | null;
   name?: string;

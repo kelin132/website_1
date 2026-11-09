@@ -10,6 +10,12 @@ import { getDb, users, guilds, type UserDoc } from "./db.server";
 import type { OwnedPokemon, PublicUser } from "./game";
 import { normalizeProfileFrame } from "./profileFrames";
 import {
+  DEFAULT_PROFILE_COLOR,
+  DEFAULT_PROFILE_FONT,
+  normalizeProfileColor,
+  normalizeProfileFont,
+} from "./profileStyle";
+import {
   POKEMON_OWNER_FIELDS,
   resolveUserIdentityKeys,
   selectPrimaryTrainer,
@@ -269,8 +275,12 @@ const AUTH_USER_PROJECTION = {
   websiteSessionRevokedAt: 1,
   profilePictureUrl: 1,
   profileBackground: 1,
+  profileBackgroundVideo: 1,
   profileFrame: 1,
+  profileFont: 1,
+  profileColor: 1,
   avatarVideo: 1,
+  membershipTier: 1,
   age: 1,
   birthday: 1,
   name: 1,
@@ -514,7 +524,7 @@ export function isConfiguredOwner(user: Partial<UserDoc>): boolean {
 }
 
 export function canUploadMovingProfile(user: Partial<UserDoc>): boolean {
-  return isConfiguredOwner(user) || Number(user.staffLevel ?? 0) >= 2;
+  return isConfiguredOwner(user) || Number(user.staffLevel ?? 0) >= 1;
 }
 
 export async function toPublicUser(doc: UserDoc): Promise<PublicUser> {
@@ -529,9 +539,18 @@ export async function toPublicUser(doc: UserDoc): Promise<PublicUser> {
   const currentBankCard = doc.bankCard === true;
   const currentBankUpgradeLevel = Math.max(0, Math.min(5, Math.floor(Number(doc.bankUpgradeLevel) || 0)));
   const currentLevel = Math.max(1, Number(doc.level) || 1);
+  const membershipTier =
+    doc.membershipTier === "basic" || doc.membershipTier === "premium"
+      ? doc.membershipTier
+      : doc.isPremium ? "premium" : "none";
   const purchasedBankLimit = BANK_LIMITS_BY_TIER[currentBankUpgradeLevel] ?? 0;
   const bankBaseLimit = Math.max(50_000, purchasedBankLimit);
   const levelBankLimit = bankBaseLimit + currentLevel * 10_000;
+  const membershipBankLimit = membershipTier === "premium"
+    ? Number.MAX_SAFE_INTEGER
+    : membershipTier === "basic"
+      ? Math.max(levelBankLimit, 150_000_000)
+      : levelBankLimit;
   const [guild, trainers] = await Promise.all([
     (await guilds()).findOne({ members: { $in: trainerJids } } as never),
     db.collection("pokemon_trainers").find(collectionOwnershipQuery(trainerJids, [...TRAINER_OWNER_FIELDS])).toArray(),
@@ -561,7 +580,7 @@ export async function toPublicUser(doc: UserDoc): Promise<PublicUser> {
   );
   const pcPokemon = publicPokemon.filter((pokemon) => !partyPokemon.includes(pokemon));
   const guildId = guild?._id ? String(guild._id) : null;
-  const title = doc.job || (doc.isPremium ? "Premium Player" : "Player");
+  const title = doc.job || (membershipTier === "premium" ? "Premium Player" : "Player");
   const imageFields = doc as UserDoc & Record<string, unknown>;
   const profileVideo = String(doc.avatarVideo ?? "").trim();
 
@@ -587,11 +606,22 @@ export async function toPublicUser(doc: UserDoc): Promise<PublicUser> {
     birthday: String(doc["birthday"] ?? "").trim() || null,
     banner: "aurora",
     profileBackground: typeof doc.profileBackground === "string" ? doc.profileBackground : null,
-    profileFrame: normalizeProfileFrame(doc.profileFrame),
+    profileBackgroundVideoUrl:
+      typeof doc.profileBackgroundVideo === "string" && /^https?:\/\//i.test(doc.profileBackgroundVideo)
+        ? doc.profileBackgroundVideo
+        : null,
+    profileFrame: membershipTier === "premium" ? normalizeProfileFrame(doc.profileFrame) : "none",
+    profileFont: membershipTier === "none"
+      ? DEFAULT_PROFILE_FONT
+      : normalizeProfileFont(doc.profileFont),
+    profileColor: membershipTier === "none"
+      ? DEFAULT_PROFILE_COLOR
+      : normalizeProfileColor(doc.profileColor),
+    membershipTier,
     coins: currentMoney,
     bank: currentBank,
     genesisCrystals: currentGenesisCrystals,
-    bankLimit: levelBankLimit,
+    bankLimit: membershipBankLimit,
     bankUpgradeLevel: currentBankUpgradeLevel,
     bankCard: currentBankCard,
     isOwner: isConfiguredOwner(doc),
@@ -614,7 +644,7 @@ export async function toPublicUser(doc: UserDoc): Promise<PublicUser> {
       ? new Date(Number(doc.lastWebsiteDaily)).toISOString()
       : null,
     streak: Number(doc.streak) || 0,
-    staffLevel: Math.max(1, Math.floor(Number(doc.staffLevel) || 1)),
+    staffLevel: Math.max(0, Math.floor(Number(doc.staffLevel) || 0)),
     onboarding: [],
   };
 }

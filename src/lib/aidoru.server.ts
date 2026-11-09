@@ -24,6 +24,10 @@ import { ECONOMY_SHOP_ITEMS } from "./economyShopCatalog";
 import { GYM_DEFINITIONS, gymBadgeIds } from "./gyms";
 import { normalizeProfileFrame } from "./profileFrames";
 import {
+  normalizeProfileColor,
+  normalizeProfileFont,
+} from "./profileStyle";
+import {
   identityVariants,
   resolveUserIdentityKeys,
   userIdentityKeys,
@@ -1680,16 +1684,39 @@ export async function updateProfile(input?: {
   avatarImage?: string | undefined;
   avatarVideo?: string | undefined;
   background?: string | undefined;
+  backgroundVideo?: string | undefined;
   profileFrame?: string | undefined;
+  profileFont?: string | undefined;
+  profileColor?: string | undefined;
 }): Promise<PublicUser> {
   const user = await requireUser();
-  if (input?.avatarVideo !== undefined && !canUploadMovingProfile(user)) {
-    throw new Error("Only the owner or staff level 2 and above can update the moving profile picture.");
+  if (
+    (input?.avatarVideo !== undefined || input?.backgroundVideo !== undefined) &&
+    !canUploadMovingProfile(user)
+  ) {
+    throw new Error("Only the owner or a moderator can update moving profile media.");
+  }
+  const membershipTier =
+    user.membershipTier === "basic" || user.membershipTier === "premium"
+      ? user.membershipTier
+      : user.isPremium ? "premium" : "none";
+  if (
+    (input?.profileFont !== undefined || input?.profileColor !== undefined) &&
+    membershipTier === "none"
+  ) {
+    throw new Error("Custom profile fonts and colors require an active membership.");
+  }
+  const requestedFrame = normalizeProfileFrame(input?.profileFrame ?? user.profileFrame);
+  if (input?.profileFrame !== undefined && requestedFrame !== "none" && membershipTier !== "premium") {
+    throw new Error("Animated profile frames require Premium membership.");
   }
   const profileImage = String(input?.avatarImage ?? user.profilePictureUrl ?? "").trim().slice(0, 1_500_000) || null;
   const profileVideo = String(input?.avatarVideo ?? user.avatarVideo ?? "").trim().slice(0, 5_000_000) || null;
   const profileBackground = String(input?.background ?? user.profileBackground ?? "").trim().slice(0, 1_500_000) || null;
-  const selectedProfileFrame = normalizeProfileFrame(input?.profileFrame ?? user.profileFrame);
+  const profileBackgroundVideo = String(
+    input?.backgroundVideo ?? user.profileBackgroundVideo ?? "",
+  ).trim().slice(0, 5_000_000) || null;
+  const selectedProfileFrame = requestedFrame;
   const updates = {
     name:
       String(input?.name ?? user.name ?? "Player")
@@ -1707,7 +1734,10 @@ export async function updateProfile(input?: {
     profilePictureUrl: profileImage,
     avatarVideo: profileVideo,
     profileBackground,
+    profileBackgroundVideo,
     profileFrame: selectedProfileFrame,
+    profileFont: normalizeProfileFont(input?.profileFont ?? user.profileFont),
+    profileColor: normalizeProfileColor(input?.profileColor ?? user.profileColor),
     websiteProfileUpdatedAt: new Date(),
   };
   const profileUpdatedAt = updates.websiteProfileUpdatedAt;
@@ -1731,7 +1761,10 @@ export async function updateProfile(input?: {
       profilePictureUrl: profileImage,
       avatarVideo: profileVideo,
       profileBackground,
+      profileBackgroundVideo,
       profileFrame: selectedProfileFrame,
+      profileFont: updates.profileFont,
+      profileColor: updates.profileColor,
       websiteProfileUpdatedAt: profileUpdatedAt,
       name: updates.name,
       username: updates.name,
@@ -1761,17 +1794,38 @@ export async function updateProfile(input?: {
     throw new Error("The profile could not sync to WhatsApp, so the change was not saved. Please retry.");
   }
 
+  const changedAnimationFields = [
+    [input?.avatarVideo, user.avatarVideo],
+    [input?.backgroundVideo, user.profileBackgroundVideo],
+  ] as const;
+  const obsoleteAssetIds = changedAnimationFields
+    .filter(([nextValue, oldValue]) => nextValue !== undefined && nextValue !== oldValue)
+    .map(([, oldValue]) => String(oldValue ?? "").match(/\/auction-media\/([a-f\d]{24})(?:[/?#]|$)/i)?.[1])
+    .filter((assetId): assetId is string => Boolean(assetId));
+  if (obsoleteAssetIds.length) {
+    try {
+      const db = await getDb();
+      await db.collection("mn_web_profile_video_assets").deleteMany({
+        _id: { $in: obsoleteAssetIds.map((assetId) => new ObjectId(assetId)) },
+      } as never);
+    } catch (cleanupError) {
+      console.warn("[profile] Could not remove replaced profile animation asset:", cleanupError);
+    }
+  }
+
   return publicCurrentUser();
 }
 
 export async function uploadProfileVideo(input?: {
   videoBase64?: string;
   contentType?: string;
+  target?: "avatar" | "background";
 }): Promise<PublicUser> {
   const user = await requireUser();
   if (!canUploadMovingProfile(user)) {
-    throw new Error("Only the owner or staff level 2 and above can upload a moving profile picture.");
+    throw new Error("Only the owner or a moderator can upload moving profile media.");
   }
+  const target = input?.target === "background" ? "background" : "avatar";
 
   const videoBase64 = String(input?.videoBase64 ?? "");
   const contentType = String(input?.contentType ?? "");
@@ -1802,10 +1856,14 @@ export async function uploadProfileVideo(input?: {
   });
 
   const origin = String(process.env["PUBLIC_APP_URL"] || "https://aidoru.zone.id").replace(/\/+$/, "");
-  const oldAssetId = String(user.avatarVideo ?? "").match(/\/auction-media\/([a-f\d]{24})(?:[/?#]|$)/i)?.[1];
+  const previousUrl = target === "background" ? user.profileBackgroundVideo : user.avatarVideo;
+  const oldAssetId = String(previousUrl ?? "").match(/\/auction-media\/([a-f\d]{24})(?:[/?#]|$)/i)?.[1];
   try {
     const formatQuery = contentType === "image/gif" ? "?profile=1&format=gif" : "?profile=1";
-    const updated = await updateProfile({ avatarVideo: `${origin}/auction-media/${assetId.toHexString()}${formatQuery}` });
+    const mediaUrl = `${origin}/auction-media/${assetId.toHexString()}${formatQuery}`;
+    const updated = await updateProfile(
+      target === "background" ? { backgroundVideo: mediaUrl } : { avatarVideo: mediaUrl },
+    );
     if (oldAssetId && oldAssetId !== assetId.toHexString()) {
       await db.collection("mn_web_profile_video_assets").deleteOne({ _id: new ObjectId(oldAssetId) });
     }

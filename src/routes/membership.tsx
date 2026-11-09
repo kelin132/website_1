@@ -24,6 +24,7 @@ const plans = [
       "40% cooldown reduction",
       "5 renames per day",
       "3 level-50 Pokémon",
+      "Custom profile fonts and colors",
     ],
   },
   {
@@ -38,6 +39,7 @@ const plans = [
       "10% win-rate boost",
       "Premium badge and animated frames",
       "Special role",
+      "Custom profile fonts and colors",
     ],
   },
 ];

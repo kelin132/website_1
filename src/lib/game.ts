@@ -124,7 +124,11 @@ export type LeaderboardRow = {
   avatarUrl: string | null;
   avatarVideoUrl: string | null;
   profileBackground: string | null;
+  profileBackgroundVideoUrl: string | null;
   profileFrame: string;
+  profileFont: string;
+  profileColor: string;
+  membershipTier: "none" | "basic" | "premium";
   pokemonCount: number;
   cardCount: number;
 };

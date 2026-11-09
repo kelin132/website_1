@@ -555,7 +555,10 @@ export const saveProfile = createServerFn({ method: "POST" })
         avatarImage: z.string().max(1_500_000).optional(),
         avatarVideo: z.string().max(5_000_000).optional(),
         background: z.string().max(1_500_000).optional(),
+        backgroundVideo: z.string().max(5_000_000).optional(),
         profileFrame: z.string().max(32).optional(),
+        profileFont: z.enum(["georgia", "arial", "trebuchet", "courier"]).optional(),
+        profileColor: z.string().regex(/^#[0-9a-fA-F]{6}$/).optional(),
       })
       .partial()
       .parse(data),
@@ -568,6 +571,7 @@ export const uploadProfileVideo = createServerFn({ method: "POST" })
       .object({
         videoBase64: z.string().min(1).max(14_000_000),
         contentType: z.enum(["image/gif", "video/mp4"]),
+        target: z.enum(["avatar", "background"]).optional(),
       })
       .parse(data),
   )
