@@ -1710,11 +1710,11 @@ export async function updateProfile(input?: {
     profileFrame: selectedProfileFrame,
     websiteProfileUpdatedAt: new Date(),
   };
-  await (await users()).updateOne({ _id: userKey(user) }, { $set: updates } as never);
+  const profileUpdatedAt = updates.websiteProfileUpdatedAt;
 
   // Kelin-MD2 reads the shared mn_users record for card ownership and profile
-  // rendering. Mirror the explicit website avatar/background there so `.p`
-  // can honor the trainer’s chosen artwork instead of always using WhatsApp.
+  // rendering. Sync every identity match before reporting the website save as
+  // successful, so a stale duplicate cannot keep serving the previous GIF.
   try {
     const rawUser = user as unknown as Record<string, unknown>;
     const identityFields = [
@@ -1724,7 +1724,6 @@ export async function updateProfile(input?: {
       rawUser["jid"],
     ];
     const botProfiles = await cardUsers();
-    const botProfile = await botProfiles.findOne(identityLookup(identityFields) as never);
     const botUserId = String(rawUser["userId"] ?? rawUser["whatsappNumber"] ?? userKey(user))
       .replace(/:\d+(?=@)/, "")
       .split("@")[0];
@@ -1733,21 +1732,33 @@ export async function updateProfile(input?: {
       avatarVideo: profileVideo,
       profileBackground,
       profileFrame: selectedProfileFrame,
-      websiteProfileUpdatedAt: new Date(),
+      websiteProfileUpdatedAt: profileUpdatedAt,
       name: updates.name,
       username: updates.name,
     };
-    if (botProfile?._id) {
-      await botProfiles.updateOne({ _id: botProfile._id } as never, { $set: botFields } as never);
-    } else if (botUserId) {
-      await botProfiles.updateOne(
-        { userId: botUserId } as never,
-        { $set: { userId: botUserId, ...botFields } } as never,
-        { upsert: true },
+    await withMongoTransaction(async (db, session) => {
+      const botProfiles = db.collection("mn_users");
+      const mirrored = await botProfiles.updateMany(
+        identityLookup(identityFields) as never,
+        { $set: botFields } as never,
+        { session },
       );
-    }
+      if (mirrored.matchedCount === 0 && botUserId) {
+        await botProfiles.updateOne(
+          { userId: botUserId } as never,
+          { $set: { userId: botUserId, ...botFields } } as never,
+          { upsert: true, session },
+        );
+      }
+      await db.collection("users").updateOne(
+        { _id: userKey(user) },
+        { $set: updates } as never,
+        { session },
+      );
+    });
   } catch (syncError) {
     console.warn("[profile] Could not mirror website profile to Kelin-MD2:", syncError);
+    throw new Error("The profile could not sync to WhatsApp, so the change was not saved. Please retry.");
   }
 
   return publicCurrentUser();
