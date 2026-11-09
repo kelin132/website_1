@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { createServerFn, useServerFn } from "@tanstack/react-start";
 import { useQuery } from "@tanstack/react-query";
-import { LoaderCircle, WalletCards } from "@/lib/lucide-icons";
+import { LoaderCircle, Trophy, WalletCards } from "@/lib/lucide-icons";
 import { AppShell } from "@/components/aidoru/AppShell";
 import { requireUser } from "@/lib/auth.server";
 import { getDb } from "@/lib/db.server";
@@ -20,9 +20,19 @@ export const Route = createFileRoute("/lottery")({
 const fetchLottery = createServerFn({ method: "GET" }).handler(async () => {
   const user = await requireUser();
   const db = await getDb();
-  const [round, aliases] = await Promise.all([
+  const now = new Date();
+  const { start: dayStart, end: dayEnd } = getHarareDayRange(now);
+  const [round, aliases, dailyDraws] = await Promise.all([
     db.collection("lottery").findOne({ _id: "current" }),
     resolveUserIdentityKeys(db, user as unknown as Record<string, unknown>),
+    db.collection("lottery_announcements")
+      .find(
+        { type: "lottery_draw", createdAt: { $gte: dayStart, $lt: dayEnd } },
+        { projection: { createdAt: 1, "payload.winners": 1, "payload.totalTickets": 1, "payload.prize": 1 } },
+      )
+      .sort({ createdAt: -1 })
+      .limit(50)
+      .toArray(),
   ]);
   const tickets = Array.isArray(round?.tickets) ? round.tickets : [];
   const aliasSet = new Set(aliases.map(String));
@@ -36,6 +46,22 @@ const fetchLottery = createServerFn({ method: "GET" }).handler(async () => {
     maxEntries: 16,
     ticketPrice: 15_000,
     myTickets: mine.reduce((sum, ticket) => sum + (Number(ticket.count) || 0), 0),
+    dailyDrawDate: new Intl.DateTimeFormat("en", {
+      timeZone: "Africa/Harare",
+      dateStyle: "full",
+    }).format(now),
+    dailyWinners: dailyDraws.map((draw) => ({
+      id: String(draw._id),
+      drawnAt: new Date(draw.createdAt).toISOString(),
+      totalTickets: Number(draw.payload?.totalTickets) || 0,
+      prize: Number(draw.payload?.prize) || 0,
+      winners: (Array.isArray(draw.payload?.winners) ? draw.payload.winners : [])
+        .map((winner) => ({
+          name: String(winner.name || "Trainer").slice(0, 48),
+          amount: Number(winner.amount) || 0,
+        }))
+        .filter((winner) => winner.amount > 0),
+    })),
     participants: tickets.map((ticket, index) => ({
       name: String(ticket.name || `Trainer ${index + 1}`).slice(0, 32),
       count: Math.max(1, Number(ticket.count) || 1),
@@ -65,6 +91,55 @@ function LotteryPage() {
           </section>
         ) : (
           <>
+            <section className="hof-panel p-6">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div className="flex items-center gap-3">
+                  <Trophy className="size-6 text-amber-200" />
+                  <div>
+                    <p className="hof-kicker">Daily results · {query.data.dailyDrawDate}</p>
+                    <h2 className="hof-heading text-2xl">Today’s winners</h2>
+                  </div>
+                </div>
+                <span className="rounded-full border border-white/10 bg-slate-950/50 px-3 py-1 text-xs font-bold text-slate-300">
+                  Resets at midnight · Harare
+                </span>
+              </div>
+              {query.data.dailyWinners.length ? (
+                <div className="mt-5 space-y-4">
+                  {query.data.dailyWinners.map((draw) => (
+                    <article key={draw.id} className="rounded-2xl border border-white/10 bg-slate-950/55 p-4">
+                      <div className="flex flex-wrap items-center justify-between gap-2 text-sm font-bold text-slate-300">
+                        <span>
+                          Drawn {new Intl.DateTimeFormat("en", {
+                            timeZone: "Africa/Harare",
+                            hour: "numeric",
+                            minute: "2-digit",
+                          }).format(new Date(draw.drawnAt))}
+                        </span>
+                        <span>{draw.totalTickets} tickets · ${draw.prize.toLocaleString()} paid</span>
+                      </div>
+                      <ol className="mt-3 grid gap-2 sm:grid-cols-3">
+                        {draw.winners.map((winner, index) => (
+                          <li key={`${draw.id}-${index}`} className="rounded-xl border border-amber-200/10 bg-amber-200/[0.04] px-3 py-3">
+                            <span className="block text-xs font-black uppercase tracking-wider text-amber-100/70">
+                              {["1st place", "2nd place", "3rd place"][index] || `Winner ${index + 1}`}
+                            </span>
+                            <strong className="mt-1 block truncate text-white">{winner.name}</strong>
+                            <span className="mt-1 block font-display text-lg font-extrabold text-amber-100">
+                              ${winner.amount.toLocaleString()}
+                            </span>
+                          </li>
+                        ))}
+                      </ol>
+                    </article>
+                  ))}
+                </div>
+              ) : (
+                <p className="mt-5 rounded-xl border border-dashed border-white/15 p-5 text-center font-bold text-slate-400">
+                  No winners have been announced today. New draw results will appear here.
+                </p>
+              )}
+            </section>
             <section className="hof-panel overflow-hidden p-6 sm:p-8">
               <div className="flex items-center gap-3">
                 <WalletCards className="size-7 text-cyan-200" />
@@ -110,6 +185,53 @@ function LotteryPage() {
       </div>
     </AppShell>
   );
+}
+
+function getHarareDayRange(now: Date) {
+  const zone = "Africa/Harare";
+  const formatter = new Intl.DateTimeFormat("en-GB", {
+    timeZone: zone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hourCycle: "h23",
+  });
+  const readParts = (date: Date) =>
+    Object.fromEntries(
+      formatter.formatToParts(date)
+        .filter((part) => part.type !== "literal")
+        .map((part) => [part.type, Number(part.value)]),
+    ) as Record<string, number>;
+  const localMidnightUtc = (year: number, month: number, day: number) => {
+    const target = Date.UTC(year, month - 1, day);
+    let guess = target;
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      const local = readParts(new Date(guess));
+      const localAsUtc = Date.UTC(
+        local.year,
+        local.month - 1,
+        local.day,
+        local.hour,
+        local.minute,
+        local.second,
+      );
+      guess += target - localAsUtc;
+    }
+    return new Date(guess);
+  };
+  const { year, month, day } = readParts(now);
+  const nextDay = new Date(Date.UTC(year, month - 1, day + 1));
+  return {
+    start: localMidnightUtc(year, month, day),
+    end: localMidnightUtc(
+      nextDay.getUTCFullYear(),
+      nextDay.getUTCMonth() + 1,
+      nextDay.getUTCDate(),
+    ),
+  };
 }
 
 function Stat({ label, value }: { label: string; value: string }) {
