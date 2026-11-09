@@ -225,6 +225,7 @@ function BattleRoomBody({ roomId }: { roomId: string }) {
         forcedSwitch={forcedSwitch}
         isSpectator={isSpectator}
         mutationPending={mutation.isPending}
+        movePending={mutation.isPending && mutation.variables?.type === "move"}
         reactionPending={reactionMutation.isPending}
         onAction={perform}
         onReaction={sendReaction}
@@ -489,11 +490,14 @@ const victoryTracks = [
 ] as const;
 const defeatTracks = ["mus_too_bad", "se_failure", "se_faint"] as const;
 
+function nextBattleMusicTrack(current?: string) {
+  const choices = battleMusicTracks.filter((track) => track !== current);
+  return choices[Math.floor(Math.random() * choices.length)] ?? battleMusicTracks[0];
+}
+
 function BattleMusic({ status }: { status: BattleRoom["status"] }) {
   const audioRef = useRef<HTMLAudioElement | null>(null);
-  const [track] = useState(
-    () => battleMusicTracks[Math.floor(Math.random() * battleMusicTracks.length)],
-  );
+  const [track, setTrack] = useState(() => nextBattleMusicTrack());
   const [enabled, setEnabled] = useState(true);
   const [autoplayBlocked, setAutoplayBlocked] = useState(false);
   useEffect(() => {
@@ -501,7 +505,7 @@ function BattleMusic({ status }: { status: BattleRoom["status"] }) {
     if (!audio) return;
     const active = enabled && status !== "finished";
     audio.volume = 0.22;
-    audio.loop = true;
+    audio.loop = false;
     audio.preload = active ? "auto" : "none";
     if (!active) {
       audio.pause();
@@ -519,8 +523,6 @@ function BattleMusic({ status }: { status: BattleRoom["status"] }) {
     window.addEventListener("keydown", resume);
     document.addEventListener("visibilitychange", resume);
     window.addEventListener("pageshow", resume);
-    audio.addEventListener("ended", resume);
-    audio.addEventListener("pause", resume);
     audio.addEventListener("canplay", resume);
     return () => {
       window.removeEventListener("pointerdown", resume);
@@ -528,12 +530,10 @@ function BattleMusic({ status }: { status: BattleRoom["status"] }) {
       window.removeEventListener("keydown", resume);
       document.removeEventListener("visibilitychange", resume);
       window.removeEventListener("pageshow", resume);
-      audio.removeEventListener("ended", resume);
-      audio.removeEventListener("pause", resume);
       audio.removeEventListener("canplay", resume);
       audio.pause();
     };
-  }, [enabled, status]);
+  }, [enabled, status, track]);
   const toggleMusic = () => {
     if (enabled && !autoplayBlocked) {
       setEnabled(false);
@@ -553,9 +553,9 @@ function BattleMusic({ status }: { status: BattleRoom["status"] }) {
         ref={audioRef}
         src={`/battle-music/${track}.mp3`}
         autoPlay
-        loop
         preload="auto"
         playsInline
+        onEnded={() => setTrack((current) => nextBattleMusicTrack(current))}
       />
       <button
         type="button"
@@ -615,6 +615,7 @@ function BattleArena({
   forcedSwitch,
   isSpectator,
   mutationPending,
+  movePending,
   reactionPending,
   onAction,
   onReaction,
@@ -627,6 +628,7 @@ function BattleArena({
   forcedSwitch: boolean;
   isSpectator: boolean;
   mutationPending: boolean;
+  movePending: boolean;
   reactionPending: boolean;
   onAction: (action: BattleAction) => void;
   onReaction: (emoji: string) => void;
@@ -924,9 +926,10 @@ function BattleArena({
         {mutationPending && (
           <div className="battle-action-loading" role="status" aria-live="polite">
             <span className="battle-loading-ball" aria-hidden="true" />
-            Resolving turn
+            {movePending ? "Move in motion" : "Resolving turn"}
           </div>
         )}
+        {movePending && <div className="battle-move-launch" aria-hidden="true" />}
         {superEffectiveActive && <SuperEffectiveBurst key={superEffectiveId} />}
         {activeFoe && activeFoe.hp > 0 && (
           <BattlePokemonSprite
@@ -1172,7 +1175,7 @@ function BattlePokemonSprite({
   // Most front sprites face left. If on foe side (right), they should face left (towards player).
   // If on player side (left), they should face right (towards foe).
   // Most back sprites face right. If on player side (left), they should face right (towards foe).
-  const isBackSprite = source.includes('/back/');
+  const isBackSprite = /\/back(?:[_/-]|$)/i.test(source) || source === pokemon.backSpriteUrl;
   const shouldFlip = side === 'me' ? !isBackSprite : isBackSprite;
 
   return (

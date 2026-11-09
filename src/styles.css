@@ -11657,3 +11657,128 @@
   background: linear-gradient(135deg, #17181c, #0a0b0e);
   color: #f1f1f2;
 }
+
+.battle-weather-layer-rain {
+  opacity: .48;
+  background:
+    linear-gradient(180deg, rgba(28, 61, 91, .28), transparent 56%),
+    repeating-linear-gradient(108deg, transparent 0 17px, rgba(209, 239, 255, .66) 18px, transparent 19px 34px);
+  animation: battle-rain-fall .38s linear infinite;
+}
+.battle-weather-layer-rain::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(180deg, rgba(37, 81, 113, .12), transparent 52%, rgba(39, 91, 125, .2));
+  animation: battle-rain-haze 2.2s ease-in-out infinite alternate;
+}
+.battle-weather-layer-snow {
+  opacity: .68;
+  background:
+    radial-gradient(circle, rgba(255,255,255,.95) 0 1.5px, transparent 2px),
+    radial-gradient(circle, rgba(225,246,255,.82) 0 1px, transparent 2px);
+  background-size: 38px 42px, 54px 61px;
+  animation: battle-snow-fall 4s linear infinite;
+}
+.battle-weather-layer-snow::before {
+  content: "";
+  position: absolute;
+  inset: -12%;
+  background:
+    radial-gradient(circle, rgba(255,255,255,.9) 0 2px, transparent 3px),
+    radial-gradient(circle, rgba(229,246,255,.72) 0 1.5px, transparent 2.5px);
+  background-size: 86px 92px, 112px 108px;
+  animation: battle-snow-drift 7s linear infinite;
+}
+.battle-weather-layer-sandstorm {
+  opacity: .56;
+  background:
+    linear-gradient(95deg, rgba(190, 142, 74, .08), rgba(240, 203, 137, .18), rgba(160, 113, 54, .12)),
+    repeating-linear-gradient(4deg, transparent 0 13px, rgba(255, 225, 173, .29) 15px, transparent 17px 30px);
+  animation: battle-sand-sweep .82s linear infinite;
+}
+.battle-weather-layer-sandstorm::before {
+  content: "";
+  position: absolute;
+  inset: -8%;
+  background:
+    radial-gradient(circle, rgba(255,225,173,.72) 0 1px, transparent 2px),
+    radial-gradient(circle, rgba(219,177,109,.55) 0 1.5px, transparent 2.5px);
+  background-size: 41px 37px, 67px 53px;
+  animation: battle-sand-drift 1.6s linear infinite;
+}
+.battle-weather-layer-sun {
+  opacity: .58;
+  background:
+    radial-gradient(ellipse at 72% 3%, rgba(255, 226, 137, .52), transparent 40%),
+    linear-gradient(180deg, rgba(255, 209, 104, .08), transparent 62%);
+  animation: battle-sun-breathe 3s ease-in-out infinite alternate;
+}
+.battle-weather-layer-sun::before {
+  content: "";
+  position: absolute;
+  inset: -25%;
+  background: conic-gradient(from 160deg at 72% 14%, transparent 0 20deg, rgba(255,239,186,.15) 23deg 31deg, transparent 35deg 54deg, rgba(255,235,170,.1) 57deg 65deg, transparent 68deg 100deg);
+  transform-origin: 72% 14%;
+  animation: battle-sun-rays 12s linear infinite;
+}
+.battle-move-launch {
+  position: absolute;
+  z-index: 18;
+  left: 29%;
+  bottom: 27%;
+  width: 48%;
+  height: .28rem;
+  border-radius: 999px;
+  background: linear-gradient(90deg, transparent, rgba(214,255,255,.94) 28%, #fff 51%, rgba(93,218,255,.88) 78%, transparent);
+  box-shadow: 0 0 .7rem rgba(143,239,255,.9), 0 0 1.5rem rgba(67,180,255,.6);
+  transform-origin: left center;
+  pointer-events: none;
+  animation: battle-move-launch .42s cubic-bezier(.16,.78,.23,1) both;
+}
+.battle-move-launch::after {
+  content: "";
+  position: absolute;
+  top: 50%;
+  right: -.8rem;
+  width: 2rem;
+  height: 2rem;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(255,255,255,.95), rgba(124,229,255,.55) 24%, transparent 72%);
+  transform: translateY(-50%);
+  animation: battle-move-impact .42s ease-out both;
+}
+@keyframes battle-move-launch {
+  0% { opacity: 0; transform: rotate(-26deg) scaleX(.04); }
+  14% { opacity: 1; }
+  78% { opacity: .95; transform: rotate(-26deg) scaleX(1); }
+  100% { opacity: 0; transform: rotate(-26deg) translateX(8%) scaleX(1.12); }
+}
+@keyframes battle-move-impact {
+  0%, 58% { opacity: 0; scale: .15; }
+  72% { opacity: 1; scale: 1.2; }
+  100% { opacity: 0; scale: 1.8; }
+}
+@keyframes battle-rain-haze {
+  from { opacity: .45; }
+  to { opacity: 1; }
+}
+@keyframes battle-snow-drift {
+  to { background-position: 48px 180px, -35px 150px; }
+}
+@keyframes battle-sand-drift {
+  to { background-position: 130px 28px, -70px 120px; }
+}
+@keyframes battle-sun-rays {
+  to { transform: rotate(18deg); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .battle-weather-layer,
+  .battle-weather-layer::before,
+  .battle-weather-layer::after,
+  .battle-move-launch,
+  .battle-move-launch::after {
+    animation-duration: .01ms !important;
+    animation-iteration-count: 1 !important;
+  }
+}

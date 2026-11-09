@@ -447,7 +447,7 @@ function sessionWasRevoked(payloadIat: unknown, revokedAt: unknown): boolean {
   return Number.isFinite(issuedAtMs) && Number.isFinite(revokedAtMs) && issuedAtMs <= revokedAtMs;
 }
 
-export async function currentUserId(): Promise<string | null> {
+async function readAuthenticatedUser() {
   const token = getCookie(COOKIE);
   if (!token) return null;
   const signingKey = secret();
@@ -467,7 +467,11 @@ export async function currentUserId(): Promise<string | null> {
     deleteCookie(COOKIE, { path: "/" });
     return null;
   }
-  return payload.sub;
+  return { id: payload.sub, user };
+}
+
+export async function currentUserId(): Promise<string | null> {
+  return (await readAuthenticatedUser())?.id ?? null;
 }
 
 export async function findUserById(id: string): Promise<UserDoc | null> {
@@ -484,11 +488,9 @@ export async function findUserById(id: string): Promise<UserDoc | null> {
 }
 
 export async function requireUser(): Promise<UserDoc & { _id: string }> {
-  const id = await currentUserId();
-  if (!id) throw new Error("Not signed in.");
-  const user = await findUserById(id);
-  if (!user) throw new Error("Session expired. Sign in again with your phone number.");
-  return user as UserDoc & { _id: string };
+  const authenticated = await readAuthenticatedUser();
+  if (!authenticated) throw new Error("Not signed in.");
+  return authenticated.user as UserDoc & { _id: string };
 }
 
 export function isConfiguredOwner(user: Partial<UserDoc>): boolean {
