@@ -20,7 +20,7 @@ const GYM_SWITCH_DELAY_MS = 550;
 function pauseBattle(milliseconds: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, milliseconds));
 }
-const FINISHED_TTL_MS = 24 * 60 * 60 * 1000;
+const FINISHED_TTL_MS = 20_000;
 const BATTLE_WEATHER: BattleWeather[] = [
   { id: "clear", name: "Clear Skies", icon: "☀️", description: "No weather effect." },
   { id: "sun", name: "Harsh Sunlight", icon: "🌞", description: "Fire moves are stronger; Water moves are weaker." },
@@ -404,6 +404,7 @@ function calcDamage(
 async function clearExpired() {
   const now = new Date();
   const staleAt = new Date(now.getTime() - INACTIVITY_TTL_MS);
+  const finishedCutoff = new Date(now.getTime() - FINISHED_TTL_MS);
   return (await battleRooms()).deleteMany({
     $or: [
       {
@@ -414,7 +415,17 @@ async function clearExpired() {
           { lastActionAt: { $exists: false }, createdAt: { $lte: staleAt } },
         ],
       },
-      { status: "finished", expiresAt: { $lte: now } },
+      {
+        status: "finished",
+        $or: [
+          { expiresAt: { $lte: now } },
+          { finishedAt: { $lte: finishedCutoff } },
+          {
+            finishedAt: { $exists: false },
+            lastActionAt: { $lte: finishedCutoff },
+          },
+        ],
+      },
     ],
   } as never);
 }
@@ -846,6 +857,7 @@ export async function getBattleRoom(roomId: string) {
 }
 
 export async function performBattleAction(roomId: string, action: BattleAction) {
+  await clearExpired();
   const user = await requireUser();
   const aliases = userIdentityAliases(user as unknown as Record<string, unknown>);
   const battleJid = await resolveBattleJid(user as unknown as Record<string, unknown>);
