@@ -16,6 +16,8 @@ import { GYM_DEFINITIONS, gymById, gymSpriteUrls, gymBadgeId, gymBadgeIds } from
 const ROOM_TTL_MS = 2 * 60 * 1000;
 const INACTIVITY_TTL_MS = 2 * 60 * 1000;
 const GYM_SWITCH_DELAY_MS = 550;
+const BATTLE_JID_CACHE_MS = 15_000;
+const battleJidCache = new Map<string, { jid: string; expiresAt: number }>();
 
 function pauseBattle(milliseconds: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, milliseconds));
@@ -175,6 +177,10 @@ function identityMatches(value: unknown, aliases: string[]) {
 }
 
 async function resolveBattleJid(user: Record<string, unknown>) {
+  const userId = String(user["_id"] ?? "");
+  const cached = battleJidCache.get(userId);
+  if (cached && cached.expiresAt > Date.now()) return cached.jid;
+
   const db = await getDb();
   const aliases = await resolveUserIdentityKeys(db, user);
   const trainers = await db.collection("pokemon_trainers")
@@ -182,7 +188,21 @@ async function resolveBattleJid(user: Record<string, unknown>) {
   trainers.sort((a, b) => ((b["party"]?.length || 0) + (b["pc"]?.length || 0))
     - ((a["party"]?.length || 0) + (a["pc"]?.length || 0)) || String(a._id).localeCompare(String(b._id)));
   const trainer = trainers[0];
-  return trainer?.["jid"] ? String(trainer["jid"]) : String(user["_id"] ?? "");
+  const jid = trainer?.["jid"] ? String(trainer["jid"]) : userId;
+  if (userId) {
+    if (battleJidCache.size >= 500) {
+      const now = Date.now();
+      for (const [key, entry] of battleJidCache) {
+        if (entry.expiresAt <= now) battleJidCache.delete(key);
+      }
+      if (battleJidCache.size >= 500) {
+        const oldest = battleJidCache.keys().next().value;
+        if (oldest) battleJidCache.delete(oldest);
+      }
+    }
+    battleJidCache.set(userId, { jid, expiresAt: Date.now() + BATTLE_JID_CACHE_MS });
+  }
+  return jid;
 }
 
 function publicMove(move: Record<string, unknown>): WebBattleMoveDoc {
@@ -439,6 +459,37 @@ async function loadRoomByReference(roomId: string) {
     room = await rooms.findOne({
       $or: [{ code }, { _id: { $regex: `${code}$`, $options: "i" } }],
     } as never);
+  }
+  return room;
+}
+
+function isBattleRoomExpired(room: WebBattleRoomDoc, now = Date.now()) {
+  if (room.expiresAt && room.expiresAt.getTime() <= now) return true;
+  const lastActivity = room.lastActionAt?.getTime() ?? room.createdAt.getTime();
+  if (room.status === "finished") {
+    const finishedAt = room.finishedAt?.getTime() ?? lastActivity;
+    return now - finishedAt >= FINISHED_TTL_MS;
+  }
+  return (room.status === "waiting" || room.status === "active")
+    && now - lastActivity >= INACTIVITY_TTL_MS;
+}
+
+async function loadLiveRoomByReference(roomId: string) {
+  let room = await loadRoomByReference(roomId);
+  if (!room) throw new Error("That battle room has expired or does not exist.");
+  if (!isBattleRoomExpired(room)) return room;
+
+  const rooms = await battleRooms();
+  const deleted = await rooms.deleteOne({ _id: room._id, version: room.version } as never);
+  if (deleted.deletedCount) throw new Error("That battle room has expired or does not exist.");
+
+  // If the room changed while it was being checked, preserve the fresh state.
+  room = await loadRoomByReference(roomId);
+  if (!room || isBattleRoomExpired(room)) {
+    if (room) {
+      await rooms.deleteOne({ _id: room._id, version: room.version } as never);
+    }
+    throw new Error("That battle room has expired or does not exist.");
   }
   return room;
 }
@@ -793,18 +844,22 @@ export async function createBattleRoom() {
 }
 
 export async function getBattleRoom(roomId: string) {
-  await clearExpired();
   const user = await requireUser();
-  let room = await loadRoomByReference(roomId);
-  if (!room) throw new Error("That battle room has expired or does not exist.");
+  let room = await loadLiveRoomByReference(roomId);
   const environmentChanged = ensureBattleEnvironment(room);
   const gymStateChanged = hydrateGymState(room);
   const gymTeamChanged = await ensureGymOpponentTeam(room);
   if (environmentChanged || gymStateChanged || gymTeamChanged) await saveRoom(room);
-  const aliases = userIdentityAliases(user as unknown as Record<string, unknown>);
-  const battleJid = await resolveBattleJid(user as unknown as Record<string, unknown>);
-  const roleAliases = Array.from(new Set([...aliases, ...identityVariants(battleJid)]));
+  const userRecord = user as unknown as Record<string, unknown>;
+  const aliases = userIdentityAliases(userRecord);
+  let battleJid = String(userRecord["_id"] ?? "");
+  let roleAliases = aliases;
   let role = roomRole(room, roleAliases);
+  if (role === "spectator") {
+    battleJid = await resolveBattleJid(userRecord);
+    roleAliases = Array.from(new Set([...aliases, ...identityVariants(battleJid)]));
+    role = roomRole(room, roleAliases);
+  }
   if (room.status === "waiting" && role !== "spectator") {
     const next = cloneRoom(room);
     const trainer = trainerFor(next, role);
@@ -829,12 +884,16 @@ export async function getBattleRoom(roomId: string) {
       next.opponent = await loadTrainerSnapshot(battleJid);
       role = "opponent";
       addLog(next, `${next.opponent.name} joined the room.`);
+      await saveRoom(next);
+      room = next;
     } else {
-      if (!next.spectatorIds.includes(battleJid)) next.spectatorIds.push(battleJid);
+      if (!next.spectatorIds.includes(battleJid)) {
+        next.spectatorIds.push(battleJid);
+        await saveRoom(next);
+        room = next;
+      }
       role = "spectator";
     }
-    await saveRoom(next);
-    room = next;
   }
   // Website rooms created by the bot can contain both trainer snapshots
   // before either player opens the link. Start those rooms immediately so
@@ -857,18 +916,22 @@ export async function getBattleRoom(roomId: string) {
 }
 
 export async function performBattleAction(roomId: string, action: BattleAction) {
-  await clearExpired();
   const user = await requireUser();
-  const aliases = userIdentityAliases(user as unknown as Record<string, unknown>);
-  const battleJid = await resolveBattleJid(user as unknown as Record<string, unknown>);
-  const roleAliases = Array.from(new Set([...aliases, ...identityVariants(battleJid)]));
-  const current = await loadRoomByReference(roomId);
-  if (!current) throw new Error("That battle room has expired or does not exist.");
+  const userRecord = user as unknown as Record<string, unknown>;
+  const aliases = userIdentityAliases(userRecord);
+  let battleJid = String(userRecord["_id"] ?? "");
+  let roleAliases = Array.from(new Set([...aliases, ...identityVariants(battleJid)]));
+  const current = await loadLiveRoomByReference(roomId);
   const room = cloneRoom(current);
   const environmentChanged = ensureBattleEnvironment(room);
   const gymStateChanged = hydrateGymState(room);
   if (environmentChanged || gymStateChanged) await saveRoom(room);
-  const role = roomRole(room, roleAliases);
+  let role = roomRole(room, roleAliases);
+  if (role === "spectator") {
+    battleJid = await resolveBattleJid(userRecord);
+    roleAliases = Array.from(new Set([...aliases, ...identityVariants(battleJid)]));
+    role = roomRole(room, roleAliases);
+  }
   if (action.type === "reaction") {
     const allowed = new Set(["🔥", "👏", "💙", "⚡", "😮", "😂"]);
     const emoji = String(action.emoji ?? "");

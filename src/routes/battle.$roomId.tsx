@@ -58,11 +58,12 @@ function BattleRoomBody({ roomId }: { roomId: string }) {
   const act = useServerFn(applyBattleAction);
   const battleQueryKey = ["aidoru", "battle-room", roomId] as const;
   const actionPendingRef = useRef(false);
+  const reactionPendingRef = useRef(false);
   const query = useQuery({
     queryKey: battleQueryKey,
     queryFn: () => loadRoom({ data: { roomId } }),
     refetchInterval: (current) => {
-      if (actionPendingRef.current) return false;
+      if (actionPendingRef.current || reactionPendingRef.current) return false;
       const status = current.state.data?.status;
       return status === "active" ? 650 : status === "waiting" ? 2500 : false;
     },
@@ -81,8 +82,41 @@ function BattleRoomBody({ roomId }: { roomId: string }) {
   });
   const reactionMutation = useMutation({
     mutationFn: (emoji: string) => act({ data: { roomId, action: { type: "reaction", emoji } } }),
+    onMutate: async (emoji) => {
+      reactionPendingRef.current = true;
+      await queryClient.cancelQueries({ queryKey: battleQueryKey });
+      const optimisticReaction = {
+        userId: `optimistic-${roomId}`,
+        emoji,
+        createdAt: Date.now(),
+      };
+      queryClient.setQueryData<BattleRoom>(battleQueryKey, (current) =>
+        current
+          ? {
+              ...current,
+              reactions: [...(current.reactions ?? []), optimisticReaction].slice(-24),
+            }
+          : current,
+      );
+      return { optimisticReaction };
+    },
+    onError: (_error, _emoji, context) => {
+      if (!context) return;
+      queryClient.setQueryData<BattleRoom>(battleQueryKey, (current) =>
+        current
+          ? {
+              ...current,
+              reactions: (current.reactions ?? []).filter(
+                (reaction) =>
+                  reaction.userId !== context.optimisticReaction.userId ||
+                  reaction.createdAt !== context.optimisticReaction.createdAt,
+              ),
+            }
+          : current,
+      );
+    },
     onSuccess: (nextRoom) => {
-      queryClient.setQueryData<BattleRoom>(["aidoru", "battle-room", roomId], (current) =>
+      queryClient.setQueryData<BattleRoom>(battleQueryKey, (current) =>
         current
           ? {
               ...current,
@@ -91,6 +125,9 @@ function BattleRoomBody({ roomId }: { roomId: string }) {
             }
           : nextRoom,
       );
+    },
+    onSettled: () => {
+      reactionPendingRef.current = false;
     },
   });
   const [flash, setFlash] = useState<string | null>(null);
@@ -145,6 +182,7 @@ function BattleRoomBody({ roomId }: { roomId: string }) {
   const forcedSwitch = room.forcedSwitch === room.joinedAs;
   const myTurn = room.turn === room.joinedAs;
   const sendReaction = (emoji: string) => {
+    if (reactionPendingRef.current) return;
     setFlash(null);
     reactionMutation.mutate(emoji, {
       onError: (error) =>
