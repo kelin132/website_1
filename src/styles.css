@@ -11564,3 +11564,96 @@
   .battle-gym-card button,
   .battle-run-button { transition: none !important; }
 }
+
+/* Neutral black battle interface; keep the battle artwork and type accents. */
+.aidoru-page-battle-room .battle-arena {
+  border-color: rgba(255, 255, 255, .14);
+  background: #08090c;
+  box-shadow: 0 1.5rem 4rem rgba(0, 0, 0, .48), inset 0 1px rgba(255, 255, 255, .04);
+}
+.aidoru-page-battle-room .battle-arena-top,
+.aidoru-page-battle-room .battle-arena-lower,
+.aidoru-page-battle-room .battle-controls {
+  border-color: rgba(255, 255, 255, .1);
+  background: #101115 !important;
+}
+.aidoru-page-battle-room .battle-message-strip {
+  border-color: rgba(255, 255, 255, .1);
+  background: #141519;
+  color: #f5f5f6;
+}
+.aidoru-page-battle-room .battle-arena :is(
+  .text-cyan-100,
+  .text-cyan-200,
+  .text-cyan-300,
+  .text-teal-100
+) {
+  color: #e6e7e9 !important;
+}
+.aidoru-page-battle-room .battle-arena .text-slate-300 { color: #c6c8cc !important; }
+.aidoru-page-battle-room .battle-turn-label,
+.aidoru-page-battle-room .battle-round-chip,
+.aidoru-page-battle-room .battle-spectator-count,
+.aidoru-page-battle-room .battle-reaction-dock,
+.aidoru-page-battle-room .battle-log {
+  border-color: rgba(255, 255, 255, .14);
+  background: #090a0d;
+  color: #e5e6e8;
+}
+.aidoru-page-battle-room .battle-arena .battle-tab,
+.aidoru-page-battle-room .battle-arena .battle-command-run {
+  border-color: rgba(255, 255, 255, .2);
+  background: linear-gradient(180deg, #292a2e, #17181b 52%, #101114);
+  box-shadow: inset 0 1px rgba(255,255,255,.08), inset 0 -2px rgba(0,0,0,.38), 0 4px 0 #050506;
+  color: #f2f2f3;
+}
+.aidoru-page-battle-room .battle-arena .battle-tab-active {
+  border-color: #d6d7da;
+  background: linear-gradient(180deg, #55565a, #35363a 52%, #242529);
+  color: #fff;
+  box-shadow: inset 0 1px rgba(255,255,255,.16), inset 0 -2px rgba(0,0,0,.32), 0 4px 0 #09090b;
+}
+.aidoru-page-battle-room .battle-arena .battle-command-run {
+  border-color: rgba(255, 255, 255, .24);
+}
+.aidoru-page-battle-room .battle-move-button {
+  border-color: rgba(255, 255, 255, .15);
+  background:
+    linear-gradient(180deg, rgba(255,255,255,.055), transparent 48%),
+    linear-gradient(150deg, #202125, #101114);
+  box-shadow: inset 0 1px rgba(255,255,255,.06), 0 3px 0 #070708;
+}
+.aidoru-page-battle-room .battle-arena .battle-reaction-button {
+  border-color: rgba(255, 255, 255, .16);
+  background: #17181b;
+}
+.aidoru-page-battle-room .battle-room-action-button,
+.aidoru-page-battle-room .battle-audio-button {
+  border-color: rgba(255, 255, 255, .16);
+  background: #111216;
+  color: #e9eaec;
+}
+.aidoru-page-battle-room .battle-room-action-button:hover:not(:disabled),
+.aidoru-page-battle-room .battle-audio-button:hover {
+  background: #25262a;
+}
+.aidoru-page-battle-room .battle-audio-button-on {
+  border-color: rgba(255, 255, 255, .36);
+  background: #27282c;
+  color: #fff;
+}
+.aidoru-page-battle-room .battle-audio-hint-blocked {
+  border: 1px solid rgba(255, 255, 255, .22);
+  border-radius: 999px;
+  background: #111216;
+  padding: .4rem .65rem;
+  color: #fff;
+}
+.aidoru-page-battle-room .battle-winner-banner,
+.aidoru-page-battle-room .battle-waiting-card,
+.aidoru-page-battle-room .battle-ready-banner,
+.aidoru-page-battle-room .battle-spectator-banner {
+  border-color: rgba(255, 255, 255, .16);
+  background: linear-gradient(135deg, #17181c, #0a0b0e);
+  color: #f1f1f2;
+}

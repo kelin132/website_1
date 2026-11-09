@@ -745,7 +745,9 @@ export async function createBattleRoom() {
     throw new Error("You need one healthy Pokémon to open a room.");
   const now = new Date();
   const room: WebBattleRoomDoc = {
-    _id: deterministicRoomId(soloPairKey(jid)),
+    // Keep old finished rooms reachable by their original links, but never
+    // reuse their ID when the same trainer starts another challenge.
+    _id: `battle-${randomUUID()}`,
     ...randomBattleEnvironment(),
     pairKey: soloPairKey(jid),
     autoStart: true,

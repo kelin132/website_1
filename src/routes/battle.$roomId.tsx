@@ -511,7 +511,14 @@ function BattleMusic({ status }: { status: BattleRoom["status"] }) {
   };
   return (
     <>
-      <audio ref={audioRef} src={`/battle-music/${track}.mp3`} loop preload="auto" />
+      <audio
+        ref={audioRef}
+        src={`/battle-music/${track}.mp3`}
+        autoPlay
+        loop
+        preload="auto"
+        playsInline
+      />
       <button
         type="button"
         className={`battle-audio-button ${enabled && !autoplayBlocked ? "battle-audio-button-on" : ""}`}
@@ -523,7 +530,9 @@ function BattleMusic({ status }: { status: BattleRoom["status"] }) {
         <Music2 aria-hidden="true" />
       </button>
       {autoplayBlocked && status !== "finished" && (
-        <span className="battle-audio-hint">Tap for music</span>
+        <span className="battle-audio-hint battle-audio-hint-blocked" role="status">
+          Tap to enable music
+        </span>
       )}
     </>
   );
