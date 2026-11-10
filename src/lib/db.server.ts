@@ -213,6 +213,11 @@ export type WebBattlePokemonDoc = {
   moves: WebBattleMoveDoc[];
   fainted: boolean;
   stunnedTurns?: number;
+  dodgeNextHit?: boolean;
+  guardSpec?: boolean;
+  accuracyBonus?: number;
+  criticalNext?: boolean;
+  battleItemUses?: string[];
 };
 
 export type WebBattleTrainerDoc = {
@@ -242,6 +247,8 @@ export type WebBattleRoomDoc = {
     rewardXp: number;
   } | null;
   rewardGrantedAt?: Date | null;
+  battleXpAwardKeys?: string[];
+  pvpRewardTrainerIds?: string[];
   _id: string;
   code?: string;
   status: "waiting" | "active" | "finished";

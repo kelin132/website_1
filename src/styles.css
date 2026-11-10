@@ -6979,7 +6979,6 @@
 }
 .battle-pokemon-me img,
 .battle-pokemon-foe img {
-  transform: none !important;
   transform-origin: center bottom;
 }
 .battle-pokemon-me.battle-pokemon-hit img { animation-name: battle-hit-sprite-me; }

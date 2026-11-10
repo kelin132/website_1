@@ -276,6 +276,11 @@ export type BattlePokemon = {
   moves: BattleMove[];
   fainted: boolean;
   stunnedTurns?: number;
+  dodgeNextHit?: boolean;
+  guardSpec?: boolean;
+  accuracyBonus?: number;
+  criticalNext?: boolean;
+  battleItemUses?: string[];
 };
 
 export type BattleTrainer = {
@@ -343,7 +348,7 @@ export type BattleAction =
   | { type: "reaction"; emoji: string }
   | { type: "move"; moveIndex: number }
   | { type: "switch"; pokemonIndex: number }
-  | { type: "item"; item: "potion" | "superpotion" | "hyperpotion" | "revive" | "fullrestore" }
+  | { type: "item"; item: string }
   | { type: "forfeit" };
 
 export type BattleReaction = {

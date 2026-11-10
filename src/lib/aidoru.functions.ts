@@ -720,7 +720,7 @@ export const applyBattleAction = createServerFn({ method: "POST" })
           z.object({ type: z.literal("switch"), pokemonIndex: z.number().int().min(0).max(5) }),
           z.object({
             type: z.literal("item"),
-            item: z.enum(["potion", "superpotion", "hyperpotion", "revive", "fullrestore"]),
+            item: z.enum(["xattack", "xspatk", "xdefense", "xspdef", "xspeed", "xaccuracy", "guardspec", "direhit"]),
           }),
           z.object({ type: z.literal("forfeit") }),
         ]),

@@ -26,6 +26,17 @@ import { AppShell } from "@/components/aidoru/AppShell";
 import { applyBattleAction, fetchBattleRoom } from "@/lib/aidoru.functions";
 import type { BattleAction, BattlePokemon, BattleRoom, BattleTrainer } from "@/lib/game";
 
+const BATTLE_ITEM_COPY: Record<string, { name: string; description: string }> = {
+  xattack: { name: "X Attack", description: "Raises attack by 50% for this battle." },
+  xspatk: { name: "X Sp. Atk", description: "Raises move damage by 30% for this battle." },
+  xdefense: { name: "X Defense", description: "Raises defense by 50% for this battle." },
+  xspdef: { name: "X Sp. Def", description: "Raises defense by 30% for this battle." },
+  xspeed: { name: "X Speed", description: "50% chance to dodge the next incoming hit." },
+  xaccuracy: { name: "X Accuracy", description: "+20 accuracy points on the next move." },
+  guardspec: { name: "Guard Spec.", description: "Blocks the next battle status effect." },
+  direhit: { name: "Dire Hit", description: "Makes the next damaging move critical." },
+};
+
 export const Route = createFileRoute("/battle/$roomId")({
   head: () => ({
     meta: [
@@ -793,6 +804,9 @@ function BattleArena({
               : "Opponent’s turn";
   const canAct =
     !isSpectator && !mutationPending && room.status === "active" && (myTurn || forcedSwitch);
+  const availableBattleItems = Object.entries(me?.inventory ?? {})
+    .filter(([id, count]) => BATTLE_ITEM_COPY[id] && count > 0)
+    .sort(([left], [right]) => BATTLE_ITEM_COPY[left].name.localeCompare(BATTLE_ITEM_COPY[right].name));
   const arenaStyle = {
     "--battle-map-bg": `url("${battleMapUrl(room.arenaId)}")`,
     ...(room.gym
@@ -1059,9 +1073,29 @@ function BattleArena({
           </div>
         )}
         {!isSpectator && tab === "items" && (
-          <div className="rounded-2xl border border-amber-200/20 bg-amber-300/10 p-5 text-center">
-            <p className="font-display text-base font-bold text-amber-100">Healing items are disabled during battles</p>
-            <p className="mt-2 text-xs leading-5 text-slate-300">Switch to another healthy Pokémon during combat. Use healing items only after the battle ends.</p>
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+            {availableBattleItems.length ? availableBattleItems.map(([id, count]) => (
+              <button
+                key={id}
+                type="button"
+                onClick={() => perform({ type: "item", item: id })}
+                disabled={!canAct || forcedSwitch}
+                className="battle-move-button text-left disabled:cursor-not-allowed disabled:opacity-40"
+                aria-label={`${BATTLE_ITEM_COPY[id].name}, ${count} owned. ${BATTLE_ITEM_COPY[id].description}`}
+              >
+                <span className="flex items-center justify-between gap-2 font-display text-sm font-bold">
+                  {BATTLE_ITEM_COPY[id].name}<small>×{count}</small>
+                </span>
+                <span className="mt-1 block text-[10px] leading-4 text-cyan-100/75">
+                  {BATTLE_ITEM_COPY[id].description}
+                </span>
+              </button>
+            )) : (
+              <div className="col-span-full rounded-2xl border border-white/10 bg-black/20 p-5 text-center">
+                <p className="font-display text-base font-bold text-slate-100">No battle items in your bag</p>
+                <p className="mt-2 text-xs leading-5 text-slate-300">Buy X items, Guard Spec., or Dire Hit from the Pokémon Mart. Healing items cannot be used during battles.</p>
+              </div>
+            )}
           </div>
         )}
         {!isSpectator && tab === "switch" && (

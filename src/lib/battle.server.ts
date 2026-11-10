@@ -23,6 +23,8 @@ function pauseBattle(milliseconds: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, milliseconds));
 }
 const FINISHED_TTL_MS = 20_000;
+const PVP_TRAINER_XP_WIN = 1_500;
+const PVP_TRAINER_XP_LOSS = 600;
 const BATTLE_WEATHER: BattleWeather[] = [
   { id: "clear", name: "Clear Skies", icon: "☀️", description: "No weather effect." },
   { id: "sun", name: "Harsh Sunlight", icon: "🌞", description: "Fire moves are stronger; Water moves are weaker." },
@@ -101,6 +103,48 @@ const ITEM_HEAL: Record<string, number> = {
   superpotion: 50,
   hyperpotion: 120,
   fullrestore: Number.MAX_SAFE_INTEGER,
+};
+const BATTLE_ITEM_EFFECTS = {
+  xattack: {
+    name: "X Attack",
+    description: "Raises attack by 50% for this battle.",
+    apply: (pokemon: WebBattlePokemonDoc) => ({ attack: Math.floor(pokemon.attack * 1.5) }),
+  },
+  xspatk: {
+    name: "X Sp. Atk",
+    description: "Raises move damage by 30% for this battle.",
+    apply: (pokemon: WebBattlePokemonDoc) => ({ attack: Math.floor(pokemon.attack * 1.3) }),
+  },
+  xdefense: {
+    name: "X Defense",
+    description: "Raises defense by 50% for this battle.",
+    apply: (pokemon: WebBattlePokemonDoc) => ({ defense: Math.floor(pokemon.defense * 1.5) }),
+  },
+  xspdef: {
+    name: "X Sp. Def",
+    description: "Raises defense by 30% for this battle.",
+    apply: (pokemon: WebBattlePokemonDoc) => ({ defense: Math.floor(pokemon.defense * 1.3) }),
+  },
+  xspeed: {
+    name: "X Speed",
+    description: "Gives a 50% chance to dodge the next incoming hit.",
+    apply: () => ({ dodgeNextHit: true }),
+  },
+  xaccuracy: {
+    name: "X Accuracy",
+    description: "Adds 20 points to the next move's accuracy.",
+    apply: () => ({ accuracyBonus: 20 }),
+  },
+  guardspec: {
+    name: "Guard Spec.",
+    description: "Blocks the next battle status effect, including a stun.",
+    apply: () => ({ guardSpec: true }),
+  },
+  direhit: {
+    name: "Dire Hit",
+    description: "Makes the next damaging move a critical hit.",
+    apply: () => ({ criticalNext: true }),
+  },
 };
 
 function value(value: unknown, fallback = "") {
@@ -421,6 +465,124 @@ function calcDamage(
   return Math.max(1, Math.floor(base * roll * stab * multiplier * weatherMultiplier));
 }
 
+async function useBattleItem(trainer: WebBattleTrainerDoc, pokemon: WebBattlePokemonDoc, itemId: string) {
+  const item = BATTLE_ITEM_EFFECTS[itemId as keyof typeof BATTLE_ITEM_EFFECTS];
+  if (!item) throw new Error("That battle item has no active effect.");
+  if (pokemon.hp <= 0) throw new Error("A fainted Pokémon cannot use items.");
+  if ((trainer.inventory[itemId] || 0) < 1) throw new Error(`You do not have ${item.name}.`);
+  const uses = pokemon.battleItemUses ?? [];
+  if (uses.includes(itemId)) throw new Error(`${item.name} was already used by this Pokémon this battle.`);
+
+  const db = await getDb();
+  const aliases = await resolveUserIdentityKeys(db, { _id: trainer.id });
+  const consumed = await db.collection("pokemon_trainers").updateOne(
+    {
+      $or: aliases.map((jid) => ({ jid })),
+      [`inventory.${itemId}`]: { $gte: 1 },
+    } as never,
+    { $inc: { [`inventory.${itemId}`]: -1 } } as never,
+  );
+  if (!consumed.modifiedCount) throw new Error(`You do not have ${item.name}.`);
+  trainer.inventory[itemId] = Math.max(0, (trainer.inventory[itemId] || 0) - 1);
+  Object.assign(pokemon, item.apply(pokemon));
+  pokemon.battleItemUses = [...uses, itemId];
+  return item;
+}
+
+function pokemonXpNeeded(level: number) {
+  return level >= 100 ? 0 : Math.floor(80 + level * 20 + 8 * Math.pow(level, 1.8));
+}
+
+function battlePokemonXpReward(defeatedPokemon: WebBattlePokemonDoc) {
+  const level = Math.max(1, Math.min(100, Math.floor(defeatedPokemon.level || 1)));
+  return Math.floor((250 + level * 100 + level * level * 7) * 1.5);
+}
+
+async function awardBattlePokemonXp(
+  room: WebBattleRoomDoc,
+  trainer: WebBattleTrainerDoc,
+  pokemon: WebBattlePokemonDoc,
+  defeatedPokemon: WebBattlePokemonDoc,
+) {
+  const rewardKey = `${trainer.id}:${pokemon.id}:${defeatedPokemon.id}`;
+  const awardedKeys = room.battleXpAwardKeys ?? [];
+  if (awardedKeys.includes(rewardKey)) return 0;
+
+  const amount = battlePokemonXpReward(defeatedPokemon);
+  const previousLevel = Math.max(1, Math.floor(pokemon.level || 1));
+  let level = previousLevel;
+  let xp = Math.max(0, pokemon.xp || 0) + amount;
+  while (level < 100 && xp >= pokemonXpNeeded(level)) {
+    xp -= pokemonXpNeeded(level);
+    level += 1;
+  }
+  const scale = (value: number) =>
+    Math.max(1, Math.floor((value / (1 + previousLevel * 0.05)) * (1 + level * 0.05)));
+  if (level > previousLevel) {
+    pokemon.maxHp = scale(pokemon.maxHp);
+    pokemon.attack = scale(pokemon.attack);
+    pokemon.defense = scale(pokemon.defense);
+    pokemon.speed = scale(pokemon.speed);
+    pokemon.hp = Math.min(pokemon.hp, pokemon.maxHp);
+  }
+  pokemon.level = level;
+  pokemon.xp = level >= 100 ? 0 : xp;
+  pokemon.xpNeeded = pokemonXpNeeded(level);
+  room.battleXpAwardKeys = [...awardedKeys, rewardKey];
+
+  const db = await getDb();
+  const aliases = await resolveUserIdentityKeys(db, { _id: trainer.id });
+  await db.collection("pokemon_owned").updateOne(
+    {
+      _id: mongoId(pokemon.id),
+      ...collectionOwnershipQuery(aliases, ["ownerJid", "owner", "userId"]),
+    } as never,
+    {
+      $set: {
+        hp: pokemon.hp,
+        maxHp: pokemon.maxHp,
+        attack: pokemon.attack,
+        defense: pokemon.defense,
+        speed: pokemon.speed,
+        level: pokemon.level,
+        xp: pokemon.xp,
+        xpNeeded: pokemon.xpNeeded,
+      },
+    } as never,
+  );
+  addLog(room, `${pokemon.displayName} gained ${amount.toLocaleString()} Pokémon XP${level > previousLevel ? ` and reached Lv. ${level}` : ""}.`);
+  return amount;
+}
+
+async function grantPvpTrainerXp(room: WebBattleRoomDoc, winnerId: string) {
+  const db = await getDb();
+  const trainers = [room.challenger, room.opponent].filter(Boolean) as WebBattleTrainerDoc[];
+  await Promise.all(trainers.map(async (trainer) => {
+    const rewardedIds = room.pvpRewardTrainerIds ?? [];
+    if (rewardedIds.includes(trainer.id)) return;
+    const aliases = await resolveUserIdentityKeys(db, { _id: trainer.id });
+    const amount = trainer.id === winnerId ? PVP_TRAINER_XP_WIN : PVP_TRAINER_XP_LOSS;
+    const result = await db.collection("pokemon_trainers").updateOne(
+      {
+        $or: aliases.map((jid) => ({ jid })),
+        pvpRewardRoomIds: { $ne: room._id },
+      } as never,
+      {
+        $inc: { xp: amount },
+        $push: { pvpRewardRoomIds: { $each: [room._id], $slice: -100 } },
+      } as never,
+    );
+    if (result.modifiedCount > 0) {
+      await db.collection("users").updateOne(
+        { $or: aliases.flatMap((jid) => [{ _id: jid }, { whatsappNumber: jid }, { jid }]) } as never,
+        { $inc: { xp: amount } } as never,
+      );
+      room.pvpRewardTrainerIds = [...rewardedIds, trainer.id];
+      addLog(room, `${trainer.name} gained ${amount.toLocaleString()} Trainer XP from the battle.`);
+    }
+  }));
+}
+
 async function clearExpired() {
   const now = new Date();
   const staleAt = new Date(now.getTime() - INACTIVITY_TTL_MS);
@@ -568,6 +730,7 @@ async function finishRoom(room: WebBattleRoomDoc, winnerId: string | null, messa
   room.expiresAt = new Date(finishedAt.getTime() + FINISHED_TTL_MS);
   addLog(room, message);
   await persistHealth(room);
+  if (!room.gym && winnerId) await grantPvpTrainerXp(room, winnerId);
 }
 
 async function saveRoom(room: WebBattleRoomDoc) {
@@ -1002,7 +1165,10 @@ export async function performBattleAction(roomId: string, action: BattleAction) 
       trainer.activeIndex = action.pokemonIndex;
       addLog(room, `${trainer.name} switched to ${replacement.displayName}.`);
     } else if (action.type === "item") {
-      throw new Error("Healing items are disabled during gym battles.");
+      const attacker = activePokemon(room, role);
+      if (!attacker) throw new Error("Both sides need an active Pokémon.");
+      const item = await useBattleItem(trainer, attacker, action.item);
+      addLog(room, `${trainer.name} used ${item.name} on ${attacker.displayName}. ${item.description}`);
     } else {
       if (action.type !== "move") throw new Error("Choose a move, switch, item, or forfeit.");
       const attacker = activePokemon(room, role);
@@ -1014,16 +1180,31 @@ export async function performBattleAction(roomId: string, action: BattleAction) 
         attacker.stunnedTurns = Math.max(0, Number(attacker.stunnedTurns) - 1);
         addLog(room, `${attacker.displayName} is stunned and cannot move this turn.`);
       } else {
-        const damage = Math.random() * 100 > (move.accuracy || 100) ? 0 : calcDamage(attacker, defender, move, room.weather);
+        const accuracy = Math.min(100, (move.accuracy || 100) + (attacker.accuracyBonus || 0));
+        const missed = Math.random() * 100 > accuracy;
+        const dodgeWasReady = !missed && Boolean(defender.dodgeNextHit);
+        const dodged = dodgeWasReady && Math.random() < 0.5;
+        let damage = missed || dodged ? 0 : calcDamage(attacker, defender, move, room.weather);
+        if (damage > 0 && attacker.criticalNext) damage = Math.floor(damage * 1.5);
         defender.hp = Math.max(0, defender.hp - damage);
-        const appliesStun = damage > 0 && move.type === "electric" && Math.random() < 0.25 && defender.hp > 0;
+        if (dodgeWasReady) defender.dodgeNextHit = false;
+        if (attacker.accuracyBonus) attacker.accuracyBonus = 0;
+        if (attacker.criticalNext) attacker.criticalNext = false;
+        const stunAttempted = damage > 0 && move.type === "electric" && move.power > 0 && Math.random() < 0.25 && defender.hp > 0;
+        const guardBlockedStun = stunAttempted && Boolean(defender.guardSpec);
+        const appliesStun = stunAttempted && !guardBlockedStun;
+        if (guardBlockedStun) defender.guardSpec = false;
         if (appliesStun) defender.stunnedTurns = 1;
-        addLog(room, `${attacker.displayName} used ${move.name}${damage ? ` for ${damage} damage.` : " It missed."}${appliesStun ? ` ${defender.displayName} was stunned.` : ""}`);
+        addLog(room, `${attacker.displayName} used ${move.name}${missed ? " and missed." : dodged ? `, but ${defender.displayName} dodged it.` : damage ? ` for ${damage} damage.` : " It had no effect."}${appliesStun ? ` ${defender.displayName} was stunned.` : guardBlockedStun ? ` ${defender.displayName}'s Guard Spec blocked the stun.` : ""}`);
       }
     }
 
     const defender = activePokemon(room, "opponent");
     if (!defender || defender.hp <= 0) {
+      const gymAttacker = activePokemon(room, role);
+      if (defender && gymAttacker) {
+        await awardBattlePokemonXp(room, trainer, gymAttacker, defender);
+      }
       const nextIndex = gymOpponent.party.findIndex((p, idx) => idx !== gymOpponent.activeIndex && p.hp > 0);
       if (nextIndex < 0) {
         await finishRoom(room, trainer.id, `${trainer.name} defeated ${room.gym.leader} and won the ${room.gym.badge}!`);
@@ -1057,11 +1238,17 @@ export async function performBattleAction(roomId: string, action: BattleAction) 
         addLog(room, `${enemy.displayName} is stunned and cannot move.`);
       } else {
         const enemyMove = enemy.moves[0];
-        const damage = enemyMove ? calcDamage(enemy, player, enemyMove, room.weather) : Math.max(1, Math.floor(enemy.attack / 10));
+        const dodgeWasReady = Boolean(player.dodgeNextHit);
+        const dodged = dodgeWasReady && Math.random() < 0.5;
+        const damage = dodged ? 0 : enemyMove ? calcDamage(enemy, player, enemyMove, room.weather) : Math.max(1, Math.floor(enemy.attack / 10));
         player.hp = Math.max(0, player.hp - damage);
-        const playerStunned = enemyMove?.type === "electric" && enemyMove.power > 0 && Math.random() < 0.25 && player.hp > 0;
+        if (dodgeWasReady) player.dodgeNextHit = false;
+        const stunAttempted = !dodged && enemyMove?.type === "electric" && enemyMove.power > 0 && Math.random() < 0.25 && player.hp > 0;
+        const guardBlockedStun = Boolean(stunAttempted && player.guardSpec);
+        const playerStunned = Boolean(stunAttempted && !guardBlockedStun);
+        if (guardBlockedStun) player.guardSpec = false;
         if (playerStunned) player.stunnedTurns = 1;
-        addLog(room, `${enemy.displayName} counterattacked for ${damage} damage.${playerStunned ? ` ${player.displayName} was stunned.` : ""}`);
+        addLog(room, `${enemy.displayName} counterattacked for ${damage} damage.${dodged ? ` ${player.displayName} dodged the attack.` : ""}${playerStunned ? ` ${player.displayName} was stunned.` : guardBlockedStun ? ` ${player.displayName}'s Guard Spec blocked the stun.` : ""}`);
       }
       if (player.hp <= 0) {
         addLog(room, `${player.displayName} fainted.`);
@@ -1108,7 +1295,14 @@ export async function performBattleAction(roomId: string, action: BattleAction) 
   if (room.turn !== role) throw new Error("Wait for your turn.");
 
   if (action.type === "item") {
-    throw new Error("Healing items are disabled during battles.");
+    const pokemon = activePokemon(room, role);
+    if (!pokemon) throw new Error("Both trainers need an active Pokémon.");
+    const item = await useBattleItem(trainer, pokemon, action.item);
+    addLog(room, `${trainer.name} used ${item.name} on ${pokemon.displayName}. ${item.description}`);
+    room.turn = opposite(role);
+    room.round += 1;
+    await saveRoom(room);
+    return serializeRoom(room, role);
   }
 
   if (action.type !== "move") throw new Error("Choose a move, switch, item, or forfeit.");
@@ -1126,7 +1320,10 @@ export async function performBattleAction(roomId: string, action: BattleAction) 
     return serializeRoom(room, role);
   }
   const attackName = `${attacker.displayName} used ${move.name}.`;
-  if (Math.random() * 100 > (move.accuracy || 100)) {
+  const accuracy = Math.min(100, (move.accuracy || 100) + (attacker.accuracyBonus || 0));
+  if (Math.random() * 100 > accuracy) {
+    if (attacker.accuracyBonus) attacker.accuracyBonus = 0;
+    if (attacker.criticalNext) attacker.criticalNext = false;
     addLog(room, `${attackName} It missed.`);
     room.turn = opposite(role);
     room.round += 1;
@@ -1135,9 +1332,18 @@ export async function performBattleAction(roomId: string, action: BattleAction) 
   }
 
   const multiplier = effectiveness(move.type, defender.types);
-  const damage = calcDamage(attacker, defender, move, room.weather);
+  const dodgeWasReady = Boolean(defender.dodgeNextHit);
+  const dodged = dodgeWasReady && Math.random() < 0.5;
+  let damage = dodged ? 0 : calcDamage(attacker, defender, move, room.weather);
+  if (damage > 0 && attacker.criticalNext) damage = Math.floor(damage * 1.5);
   defender.hp = Math.max(0, defender.hp - damage);
-  const appliesStun = move.type === "electric" && move.power > 0 && Math.random() < 0.25 && defender.hp > 0;
+  if (dodgeWasReady) defender.dodgeNextHit = false;
+  if (attacker.accuracyBonus) attacker.accuracyBonus = 0;
+  if (attacker.criticalNext) attacker.criticalNext = false;
+  const stunAttempted = !dodged && move.type === "electric" && move.power > 0 && Math.random() < 0.25 && defender.hp > 0;
+  const guardBlockedStun = stunAttempted && Boolean(defender.guardSpec);
+  const appliesStun = stunAttempted && !guardBlockedStun;
+  if (guardBlockedStun) defender.guardSpec = false;
   if (appliesStun) defender.stunnedTurns = 1;
   const effectivenessText =
     multiplier === 0
@@ -1147,9 +1353,10 @@ export async function performBattleAction(roomId: string, action: BattleAction) 
         : multiplier <= 0.5
           ? " It was not very effective."
           : "";
-  addLog(room, `${attackName} ${damage} damage.${effectivenessText}${appliesStun ? ` ${defender.displayName} was stunned.` : ""}`);
+  addLog(room, `${attackName} ${dodged ? `${defender.displayName} dodged the attack.` : `${damage} damage.`}${effectivenessText}${appliesStun ? ` ${defender.displayName} was stunned.` : guardBlockedStun ? ` ${defender.displayName}'s Guard Spec blocked the stun.` : ""}`);
 
   if (defender.hp <= 0) {
+    await awardBattlePokemonXp(room, trainer, attacker, defender);
     addLog(room, `${defender.displayName} fainted.`);
     const defenderTrainer = trainerFor(room, opposite(role));
     if (!healthyPokemon(defenderTrainer)) {
