@@ -9287,8 +9287,8 @@
   filter: drop-shadow(0 1rem 1.5rem rgba(0, 0, 0, 0.45));
 }
 .profile-hero-avatar {
-  width: clamp(8rem, 25vw, 11rem);
-  height: clamp(8rem, 25vw, 11rem);
+  width: clamp(8rem, 30vw, 18rem);
+  height: clamp(8rem, 30vw, 18rem);
   aspect-ratio: 1;
   border-radius: 50%;
   border: 4px solid rgba(237, 244, 255, 0.92);
